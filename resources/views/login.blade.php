@@ -1,4 +1,4 @@
-<form action="{{ route('auth.login') }}" method="post">
+<form action="{{ route('login') }}" method="post">
     @csrf
     <div class="row gy-3 overflow-hidden">
         <div class="col-12">
