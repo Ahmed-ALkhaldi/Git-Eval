@@ -10,6 +10,48 @@ Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('auth
 Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Route::get('/login', function () {
 //     return view('login'); // login.blade.php
 // })->name('login');

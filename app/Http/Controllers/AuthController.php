@@ -11,14 +11,16 @@ class AuthController extends Controller
 {
 
     
+    public function showRegisterForm(){
+        return view('register'); // يعرض register.blade.php
+    }
 
-    public function showLoginForm()
-    {
+
+    public function showLoginForm(){
         return view('login'); // يعرض login.blade.php
     }
 
-    public function login(Request $request)
-    {
+    public function login(Request $request){
         $credentials = $request->only('email', 'password');
 
         if (Auth::attempt($credentials)) {
