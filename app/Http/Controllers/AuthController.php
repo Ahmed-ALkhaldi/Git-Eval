@@ -52,6 +52,18 @@ class AuthController extends Controller
             'role' => $request->role,
         ]);
 
+        auth()->login($user); // تسجيل الدخول مباشرة بعد التسجيل
+
+        // التوجيه حسب الدور
+        if ($user->role === 'student') {
+            return view('studantDashboard'); // لاحظ الاسم هنا
+        } elseif ($user->role === 'supervisor') {
+            return view('supervisorDashboard');
+        }
+
+        // توجيه احتياطي إن لم يكن الدور معروفًا
+        return redirect('/login')->withErrors(['role' => 'Invalid user role.']);
+
         // Create token
         $token = $user->createToken('auth_token')->plainTextToken;
 
