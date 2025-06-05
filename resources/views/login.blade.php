@@ -27,7 +27,7 @@
     <br>
     <!-- رابط إلى صفحة التسجيل -->
     <p>Don't have an account?</p>
-    <a href="{{ route('auth.register.form') }}">
+    <a href="{{ route('register') }}">
         <button>Register</button>
     </a>
 </body>
