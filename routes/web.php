@@ -4,17 +4,23 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 
 
-Route::get('/login', function () {
-    return view('login'); // login.blade.php
-})->name('login');
+Route::get('/login', [AuthController::class, 'showLoginForm'])->name('auth.login');
+Route::post('/login', [AuthController::class, 'login'])->name('auth.login.submit');
+Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('auth.register.form');
+Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
+Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 
-Route::post('/login', [AuthController::class, 'loginWeb']);
+// Route::get('/login', function () {
+//     return view('login'); // login.blade.php
+// })->name('login');
 
-Route::get('/register', function () {
-    return view('register');
-})->name('register');
+// Route::post('/login', [AuthController::class, 'loginWeb']);
 
-Route::post('/register', [AuthController::class, 'register'])->name('register');
+// Route::get('/register', function () {
+//     return view('register');
+// })->name('register');
+
+// Route::post('/register', [AuthController::class, 'register'])->name('register');
 
 
 // Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
