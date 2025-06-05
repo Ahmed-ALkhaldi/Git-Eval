@@ -34,6 +34,16 @@
         <label>تأكيد كلمة المرور:</label><br>
         <input type="password" name="password_confirmation" required><br><br>
 
+        <label for="role">Select Role:</label>
+        <select name="role" required>
+            <option value="">-- Select Role --</option>
+            <option value="student">Student</option>
+            <option value="supervisor">Supervisor</option>
+            <!-- If needed:
+            <option value="admin">Admin</option>
+            -->
+        </select><br><br>
+
         <button type="submit">تسجيل</button>
     </form>
 
