@@ -10,9 +10,32 @@ class ProjectController extends Controller
 
     } // List all projects (for supervisor or admin)
 
-    public function store(Request $request) {
-        
-    } // Create project
+    public function create(){
+        return view('projects.create');
+    }
+
+    public function store(Request $request){
+        $request->validate([
+            'title' => 'required|string',
+            'description' => 'nullable|string',
+            'repository_url' => 'required|url',
+        ]);
+
+        $project = Project::create([
+            'title' => $request->title,
+            'description' => $request->description,
+            'student_id' => Auth::id(),
+        ]);
+
+        // إنشاء مستودع مرتبط بالمشروع
+        Repository::create([
+            'project_id' => $project->id,
+            'url' => $request->repository_url,
+        ]);
+
+        return redirect()->route('dashboard.student')->with('success', 'Project created successfully!');
+    }
+ // Create project
 
     public function show($id) {
         

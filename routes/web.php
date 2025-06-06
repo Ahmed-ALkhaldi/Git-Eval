@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ProjectController;
 
 
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('auth.login');
@@ -14,8 +15,15 @@ Route::get('/student/dashboard', function () {
 
 Route::get('/supervisor/dashboard', function () {
     return view('supervisor.supervisorDashboard');
-})->name('dashboard.supervisor');   
+})->name('dashboard.supervisor');
+Route::post('/logout', function () {
+    Auth::logout();
+    return redirect('/login');
+})->name('logout');
 
+
+Route::get('/projects/create', [ProjectController::class, 'create'])->name('projects.create');
+Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
 
 
 
