@@ -9,7 +9,7 @@ Route::post('/login', [AuthController::class, 'login'])->name('auth.login.submit
 Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register');
 Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
 Route::get('/student/dashboard', function () {
-    return view('student.studantDashboard');
+    return view('student.studentDashboard');
 })->name('dashboard.student');
 
 Route::get('/supervisor/dashboard', function () {

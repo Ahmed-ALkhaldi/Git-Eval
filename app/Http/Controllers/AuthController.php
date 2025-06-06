@@ -55,10 +55,10 @@ class AuthController extends Controller
         auth()->login($user); // تسجيل الدخول مباشرة بعد التسجيل
 
         // التوجيه حسب الدور
-        if ($user->role === 'student') {
-            return view('studantDashboard'); // لاحظ الاسم هنا
-        } elseif ($user->role === 'supervisor') {
-            return view('supervisorDashboard');
+        if ($user->role === 'supervisor') {
+            return redirect()->route('dashboard.supervisor'); // لاحظ الاسم هنا
+        } elseif ($user->role === 'student') {
+            return redirect()->route('dashboard.student');
         }
 
         // توجيه احتياطي إن لم يكن الدور معروفًا
