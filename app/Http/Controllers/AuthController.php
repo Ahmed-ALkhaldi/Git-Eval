@@ -24,14 +24,24 @@ class AuthController extends Controller
         $credentials = $request->only('email', 'password');
 
         if (Auth::attempt($credentials)) {
-            // نجاح تسجيل الدخول
-            return redirect()->intended('/dashboard'); // أو أي صفحة رئيسية
+            $user = Auth::user();
+
+            // توجيه حسب الدور
+            if ($user->role === 'student') {
+                return redirect()->route('dashboard.student'); // لاحظ المسار الصحيح
+            } elseif ($user->role === 'supervisor') {
+                return redirect()->route('dashboard.supervisor');
+            }
+
+            // توجيه افتراضي في حال لم يكن الدور معروفًا
+            return redirect('/login')->withErrors(['role' => 'User role is not valid.']);
         }
 
         return back()->withErrors([
-            'email' => 'Email or password incorrect',
+            'email' => 'Invalid credentials.',
         ]);
     }
+
 
 
     //

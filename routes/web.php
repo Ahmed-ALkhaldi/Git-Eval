@@ -14,7 +14,7 @@ Route::get('/student/dashboard', function () {
 
 Route::get('/supervisor/dashboard', function () {
     return view('supervisor.supervisorDashboard');
-})->name('dashboard.supervisor');
+})->name('dashboard.supervisor');   
 
 
 
