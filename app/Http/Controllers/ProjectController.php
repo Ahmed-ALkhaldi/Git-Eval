@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
 use App\Models\Project;
+use App\Models\Repository;
 
 
 class ProjectController extends Controller
@@ -19,6 +20,10 @@ class ProjectController extends Controller
     }
 
     public function store(Request $request){
+        if (!Auth::check() || Auth::user()->role !== 'student') {
+            abort(403, 'Only students can create projects.');
+        }
+
         $request->validate([
             'title' => 'required|string',
             'description' => 'nullable|string',
@@ -31,7 +36,6 @@ class ProjectController extends Controller
             'student_id' => Auth::id(),
         ]);
 
-        // إنشاء مستودع مرتبط بالمشروع
         Repository::create([
             'project_id' => $project->id,
             'url' => $request->repository_url,
@@ -39,6 +43,7 @@ class ProjectController extends Controller
 
         return redirect()->route('dashboard.student')->with('success', 'Project created successfully!');
     }
+
  // Create project
 
     public function show($id) {
