@@ -34,7 +34,7 @@
 
         <div class="mb-3">
             <label for="repository_url" class="form-label">GitHub Repository URL</label>
-            <input type="url" name="repository_url" id="repository_url" class="form-control" value="{{ old('repository_url') }}" required>
+            <input type="url" name="github_url" id="github_url" class="form-control" value="{{ old('repository_url') }}" required>
         </div>
 
         <button type="submit" class="btn btn-success">Create Project</button>

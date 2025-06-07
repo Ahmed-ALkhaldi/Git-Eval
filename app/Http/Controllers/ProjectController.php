@@ -19,7 +19,7 @@ class ProjectController extends Controller
         return view('projects.create');
     }
 
-    public function store(Request $request){
+    public function store(Request $request) {
         if (!Auth::check() || Auth::user()->role !== 'student') {
             abort(403, 'Only students can create projects.');
         }
@@ -27,7 +27,7 @@ class ProjectController extends Controller
         $request->validate([
             'title' => 'required|string',
             'description' => 'nullable|string',
-            'repository_url' => 'required|url',
+            'github_url' => 'required|url',
         ]);
 
         $project = Project::create([
@@ -36,9 +36,15 @@ class ProjectController extends Controller
             'student_id' => Auth::id(),
         ]);
 
+        // استخراج اسم المستودع من الرابط
+        $repoUrl = $request->github_url;
+        $repoPath = explode('/', trim(parse_url($repoUrl, PHP_URL_PATH), '/'));
+        $repoName = $repoPath[1] ?? null;
+
         Repository::create([
             'project_id' => $project->id,
-            'url' => $request->repository_url,
+            'github_url' => $repoUrl,
+            'repo_name' => $repoName,
         ]);
 
         return redirect()->route('dashboard.student')->with('success', 'Project created successfully!');

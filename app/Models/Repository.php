@@ -9,7 +9,8 @@ class Repository extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['project_id', 'github_url'];
+    protected $fillable = ['project_id', 'github_url', 'repo_name'];
+
 
     public function project()
     {
