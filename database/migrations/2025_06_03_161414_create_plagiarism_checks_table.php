@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('plagiarism_checks', function (Blueprint $table) {
-         $table->id();
+        $table->id();
         $table->foreignId('project_id')->constrained()->onDelete('cascade');
         $table->float('similarity_score'); // 0.0 - 100.0
         $table->string('status')->default('pending'); // pending, checked, flagged
