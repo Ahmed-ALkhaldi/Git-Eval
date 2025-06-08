@@ -16,60 +16,76 @@ class ProjectController extends Controller
     } // List all projects (for supervisor or admin)
 
     public function create(){
-        $students = User::where('role', 'student')->get(); // فقط الطلاب
+        $students = User::where('role', 'student')->get();
         return view('projects.create', compact('students'));
     }
 
 
-    public function store(Request $request) {
+    public function store(Request $request){
+        // تأكد أن المستخدم مسجل دخوله وطالب
         if (!Auth::check() || Auth::user()->role !== 'student') {
             abort(403, 'Only students can create projects.');
         }
 
+        // التحقق من صحة البيانات
         $request->validate([
             'title' => 'required|string',
             'description' => 'nullable|string',
             'github_url' => 'required|url',
-            'students' => 'required|array',            // تأكد من إرسال قائمة طلاب
-            'students.*' => 'exists:users,id',         // كل طالب يجب أن يكون موجودًا
+            'students' => 'nullable|array',
+            'students.*' => 'exists:users,id',
         ]);
 
+        // إنشاء المشروع وربطه بصاحب المشروع (الطالب الحالي)
         $project = Project::create([
             'title' => $request->title,
             'description' => $request->description,
+            'student_id' => Auth::id(),
         ]);
 
-        // استخراج اسم المستودع من رابط GitHub
-        $repoUrl = $request->github_url;
-        $repoPath = explode('/', trim(parse_url($repoUrl, PHP_URL_PATH), '/'));
-        $repoName = $repoPath[1] ?? null;
+        
 
+        // إنشاء مستودع GitHub المرتبط بالمشروع
         Repository::create([
             'project_id' => $project->id,
-            'github_url' => $repoUrl,
-            'repo_name' => $repoName,
+            'github_url' => $request->github_url,
+            'repo_name' => basename(parse_url($request->github_url, PHP_URL_PATH)), // استخراج الاسم من الرابط
         ]);
 
-        // ربط الطلاب بالمشروع
-        $project->students()->attach($request->students);
+        // إعداد أعضاء الفريق: الطلاب الآخرين بالإضافة للطالب الحالي
+        $studentIds = $request->students ?? [];
+        $studentIds[] = Auth::id(); // أضف الطالب الحالي دائمًا
 
-        return redirect()->route('dashboard.student')->with('success', 'Project created successfully!');
+        // ربط الطلاب بالمشروع في الجدول الوسيط project_user
+        $project->students()->attach($studentIds);
+
+        // إعادة التوجيه لواجهة الطالب مع رسالة نجاح
+        return redirect()->route('dashboard.student')->with('success', 'Project created with team members!');
+    }
+
+    private function extractRepoName($url)
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = trim($path, '/');
+        $segments = explode('/', $path);
+        return end($segments);
     }
 
 
-    public function supervisorIndex(){
-        // جلب المشاريع التي لا يوجد لها مشرف
-        $projects = Project::whereNull('supervisor_id')->get();
-        return view('supervisor.projects.index', compact('projects'));
-    }
 
-    public function approve($id){
-        $project = Project::findOrFail($id);
-        $project->supervisor_id = Auth::id();
-        $project->save();
+    // public function supervisorIndex(){
+    //     // جلب المشاريع التي لا يوجد لها مشرف
+    //     $projects = Project::whereNull('supervisor_id')->get();
+    //     return view('supervisor.projects.index', compact('projects'));
+    // }
 
-        return redirect()->route('supervisor.projects')->with('success', 'Project approved successfully.');
-    }
+    // public function approve($id){
+    //     $project = Project::findOrFail($id);
+    //     $project->supervisor_id = Auth::id();
+    //     $project->save();
+
+    //     return redirect()->route('supervisor.projects')->with('success', 'Project approved successfully.');
+    // }
 
 
 

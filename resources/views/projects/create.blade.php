@@ -1,7 +1,6 @@
 <div class="container mt-4">
     <h3>Add New Project</h3>
 
-    {{-- عرض الأخطاء إن وُجدت --}}
     @if ($errors->any())
         <div class="alert alert-danger">
             <ul class="mb-0">
@@ -9,13 +8,6 @@
                     <li>{{ $error }}</li>
                 @endforeach
             </ul>
-        </div>
-    @endif
-
-    {{-- عرض رسالة النجاح إن وُجدت --}}
-    @if (session('success'))
-        <div class="alert alert-success">
-            {{ session('success') }}
         </div>
     @endif
 
@@ -33,10 +25,15 @@
         </div>
 
         <div class="mb-3">
+            <label for="github_url" class="form-label">GitHub Repository URL</label>
+            <input type="url" name="github_url" id="github_url" class="form-control" value="{{ old('github_url') }}" required>
+        </div>
+
+        <div class="mb-3">
             <label for="students" class="form-label">Add Team Members (Students)</label>
             <select name="students[]" id="students" class="form-control" multiple>
                 @foreach($students as $student)
-                    @if($student->id !== Auth::id()) {{-- لا يظهر نفسه --}}
+                    @if($student->id !== Auth::id())
                         <option value="{{ $student->id }}">{{ $student->name }} ({{ $student->email }})</option>
                     @endif
                 @endforeach
@@ -44,12 +41,7 @@
             <small class="text-muted">Hold CTRL (or ⌘ on Mac) to select multiple students.</small>
         </div>
 
-
-        <div class="mb-3">
-            <label for="repository_url" class="form-label">GitHub Repository URL</label>
-            <input type="url" name="github_url" id="github_url" class="form-control" value="{{ old('repository_url') }}" required>
-        </div>
-
         <button type="submit" class="btn btn-success">Create Project</button>
     </form>
 </div>
+

@@ -18,8 +18,9 @@ class Project extends Model
     // الطلاب المرتبطين بالمشروع
     public function students()
     {
-        return $this->belongsToMany(User::class);
+        return $this->belongsToMany(User::class, 'project_user');
     }
+
 
     // المشرف المسؤول
     public function supervisor()

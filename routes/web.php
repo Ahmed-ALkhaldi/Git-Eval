@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\SupervisorRequestController;
 
 
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('auth.login');
@@ -24,8 +25,17 @@ Route::post('/logout', function () {
 
 Route::get('/projects/create', [ProjectController::class, 'create'])->name('projects.create');
 Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
-Route::get('/supervisor/projects', [ProjectController::class, 'supervisorIndex'])->middleware('auth')->name('supervisor.projects');
-Route::post('/supervisor/projects/approve/{id}', [ProjectController::class, 'approve'])->middleware('auth')->name('supervisor.approve');
+// Route::get('/supervisor/projects', [ProjectController::class, 'supervisorIndex'])->middleware('auth')->name('supervisor.projects');
+// Route::post('/supervisor/projects/approve/{id}', [ProjectController::class, 'approve'])->middleware('auth')->name('supervisor.approve');
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/supervisors', [SupervisorRequestController::class, 'indexForStudent'])->name('supervisors.list');
+    Route::post('/supervisors/request/{id}', [SupervisorRequestController::class, 'sendRequest'])->name('supervisors.request');
+
+    Route::get('/supervisor/requests', [SupervisorRequestController::class, 'indexForSupervisor'])->name('supervisor.requests');
+    Route::post('/supervisor/requests/{id}/{action}', [SupervisorRequestController::class, 'respond'])->name('supervisor.request.respond');
+});
 
 
 
