@@ -33,6 +33,19 @@
         </div>
 
         <div class="mb-3">
+            <label for="students" class="form-label">Add Team Members (Students)</label>
+            <select name="students[]" id="students" class="form-control" multiple>
+                @foreach($students as $student)
+                    @if($student->id !== Auth::id()) {{-- لا يظهر نفسه --}}
+                        <option value="{{ $student->id }}">{{ $student->name }} ({{ $student->email }})</option>
+                    @endif
+                @endforeach
+            </select>
+            <small class="text-muted">Hold CTRL (or ⌘ on Mac) to select multiple students.</small>
+        </div>
+
+
+        <div class="mb-3">
             <label for="repository_url" class="form-label">GitHub Repository URL</label>
             <input type="url" name="github_url" id="github_url" class="form-control" value="{{ old('repository_url') }}" required>
         </div>
