@@ -6,6 +6,7 @@ use App\Http\Controllers\API\AuthController as APIAuthController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RepositoryController;
 use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\GitHubRepositoryController;
 
 
 Route::post('/login', [APIAuthController::class, 'login']);
@@ -14,7 +15,8 @@ Route::post('/register', [APIAuthController::class, 'register']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store']);
-    // Add more API routes as needed
+    Route::get('/repository-info/{project}', [GitHubRepositoryController::class, 'fetch']);
+
 });
 
 

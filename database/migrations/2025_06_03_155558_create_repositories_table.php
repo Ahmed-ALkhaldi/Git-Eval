@@ -17,6 +17,10 @@ return new class extends Migration
             $table->string('repo_name'); // eg. user/repo
             $table->string('github_url');
             $table->string('default_branch')->default('main');
+            $table->text('description')->nullable();
+            $table->unsignedInteger('stars')->default(0);
+            $table->unsignedInteger('forks')->default(0);
+            $table->unsignedInteger('open_issues')->default(0);
             $table->timestamps();
         });
     }

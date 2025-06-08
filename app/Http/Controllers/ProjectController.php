@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\User;
 use App\Models\Project;
 use App\Models\Repository;
+use App\Models\commits;
 
 
 class ProjectController extends Controller
@@ -22,12 +23,10 @@ class ProjectController extends Controller
 
 
     public function store(Request $request){
-        // تأكد أن المستخدم مسجل دخوله وطالب
         if (!Auth::check() || Auth::user()->role !== 'student') {
             abort(403, 'Only students can create projects.');
         }
 
-        // التحقق من صحة البيانات
         $request->validate([
             'title' => 'required|string',
             'description' => 'nullable|string',
@@ -36,32 +35,56 @@ class ProjectController extends Controller
             'students.*' => 'exists:users,id',
         ]);
 
-        // إنشاء المشروع وربطه بصاحب المشروع (الطالب الحالي)
         $project = Project::create([
             'title' => $request->title,
             'description' => $request->description,
             'student_id' => Auth::id(),
         ]);
 
-        
+        $repoUrl = $request->github_url;
+        $repoName = $this->extractRepoName($repoUrl);
+        $parsed = $this->parseGitHubUrl($repoUrl);
 
-        // إنشاء مستودع GitHub المرتبط بالمشروع
-        Repository::create([
+        $repoResponse = null;
+        $commitsResponse = null;
+
+        if ($parsed) {
+            $repoResponse = Http::get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
+            $commitsResponse = Http::get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}/commits");
+        }
+
+        $repoData = [
             'project_id' => $project->id,
-            'github_url' => $request->github_url,
-            'repo_name' => basename(parse_url($request->github_url, PHP_URL_PATH)), // استخراج الاسم من الرابط
-        ]);
+            'github_url' => $repoUrl,
+            'repo_name' => $repoName,
+            'description' => $repoResponse['description'] ?? null,
+            'stars' => $repoResponse['stargazers_count'] ?? 0,
+            'forks' => $repoResponse['forks_count'] ?? 0,
+            'open_issues' => $repoResponse['open_issues_count'] ?? 0,
+        ];
 
-        // إعداد أعضاء الفريق: الطلاب الآخرين بالإضافة للطالب الحالي
+        $repository = Repository::create($repoData);
+
+        if ($commitsResponse && $commitsResponse->ok()) {
+            foreach ($commitsResponse->json() as $commit) {
+                Commit::create([
+                    'repository_id' => $repository->id,
+                    'commit_sha' => $commit['sha'],
+                    'author_name' => $commit['commit']['author']['name'],
+                    'author_email' => $commit['commit']['author']['email'] ?? null,
+                    'commit_date' => $commit['commit']['author']['date'],
+                    'message' => $commit['commit']['message'],
+                ]);
+            }
+        }
+
         $studentIds = $request->students ?? [];
-        $studentIds[] = Auth::id(); // أضف الطالب الحالي دائمًا
-
-        // ربط الطلاب بالمشروع في الجدول الوسيط project_user
+        $studentIds[] = Auth::id();
         $project->students()->attach($studentIds);
 
-        // إعادة التوجيه لواجهة الطالب مع رسالة نجاح
-        return redirect()->route('dashboard.student')->with('success', 'Project created with team members!');
+        return redirect()->route('dashboard.student')->with('success', 'Project created and GitHub data + commits fetched!');
     }
+
 
     private function extractRepoName($url)
     {
@@ -70,6 +93,14 @@ class ProjectController extends Controller
         $segments = explode('/', $path);
         return end($segments);
     }
+
+    private function parseGitHubUrl($url)
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $segments = explode('/', trim($path, '/'));
+        return count($segments) >= 2 ? ['user' => $segments[0], 'repo' => $segments[1]] : null;
+    }
+
 
 
 

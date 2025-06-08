@@ -14,12 +14,11 @@ return new class extends Migration
         Schema::create('commits', function (Blueprint $table) {
         $table->id();
         $table->foreignId('repository_id')->constrained()->onDelete('cascade');
-        $table->foreignId('author_id')->constrained('users')->onDelete('cascade');
-        $table->string('commit_hash')->unique();
-        $table->string('message');
-        $table->timestamp('committed_at');
-        $table->integer('additions')->default(0);
-        $table->integer('deletions')->default(0);
+        $table->string('commit_sha');                  // رقم الـ commit
+        $table->string('author_name');                 // اسم الكاتب
+        $table->string('author_email')->nullable();    // الإيميل (قد يكون null)
+        $table->timestamp('commit_date');              // وقت الـ commit
+        $table->text('message');                       // رسالة الـ commit
         $table->timestamps();
     });
 
