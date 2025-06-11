@@ -8,11 +8,13 @@ use Illuminate\Support\Facades\Auth;
 use Symfony\Component\Process\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use App\Models\User;
 use App\Models\Project;
 use App\Models\Repository;
 use App\Models\commits;
 use App\Models\CodeAnalysisReport;
+use ZipArchive;
 use Carbon\Carbon;
 
 
@@ -30,7 +32,7 @@ class ProjectController extends Controller
 
 
     public function store(Request $request){
-        set_time_limit(180); // يزيد وقت التنفيذ إلى 3 دقائق
+        set_time_limit(180);
 
         if (!Auth::check() || Auth::user()->role !== 'student') {
             abort(403, 'Only students can create projects.');
@@ -58,8 +60,13 @@ class ProjectController extends Controller
         $commitsResponse = null;
 
         if ($parsed) {
-            $repoResponse = Http::get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
+            $repoResponse = Http::withHeaders(['User-Agent' => 'Laravel'])
+                ->get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
             $commitsResponse = Http::get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}/commits");
+        }
+
+        if (!$repoResponse || !$repoResponse->ok()) {
+            return redirect()->back()->with('error', '❌ Failed to fetch GitHub repository info.');
         }
 
         $repoData = [
@@ -87,45 +94,27 @@ class ProjectController extends Controller
             }
         }
 
-        // تحميل ZIP وتخزينه
+        // ✅ تحميل ملف ZIP فقط (بدون فك الضغط)
         $defaultBranch = $repoResponse['default_branch'] ?? 'main';
         $zipUrl = "https://github.com/{$parsed['user']}/{$parsed['repo']}/archive/refs/heads/{$defaultBranch}.zip";
         $zipFileName = "project_{$project->id}.zip";
         $zipContents = @file_get_contents($zipUrl);
 
         if (!$zipContents) {
-            return redirect()->back()->with('error', 'Failed to download the GitHub ZIP archive.');
+            return redirect()->back()->with('error', '❌ Failed to download the GitHub ZIP archive.');
         }
 
         Storage::put("sonarqube_zips/{$zipFileName}", $zipContents);
 
-        // 1. مسار الملف ZIP الكامل
-        $zipPath = storage_path("app/sonarqube_zips/{$zipFileName}");
-
-        // 2. تحديد مجلد الاستخراج
-        $extractPath = storage_path("app/sonarqube_projects/project_{$project->id}");
-
-        // 3. إنشاء مجلد إذا لم يكن موجودًا
-        if (!file_exists($extractPath)) {
-            mkdir($extractPath, 0777, true);
-        }
-
-        // 4. فك الضغط باستخدام ZipArchive
-        $zip = new \ZipArchive;
-        if ($zip->open($zipPath) === true) {
-            $zip->extractTo($extractPath);
-            $zip->close();
-        } else {
-            return redirect()->back()->with('error', 'Failed to extract ZIP archive.');
-        }
-
-
+        // ربط الطلاب
         $studentIds = $request->students ?? [];
         $studentIds[] = Auth::id();
         $project->students()->attach($studentIds);
 
-        return redirect()->route('dashboard.student')->with('success', 'Project created and GitHub data + commits + ZIP saved!');
+        return redirect()->route('dashboard.student')->with('success', '✅ Project created and ZIP downloaded!');
     }
+
+
 
 
 
@@ -159,16 +148,50 @@ class ProjectController extends Controller
 
     public function analyze($id)
     {
-        $project = Project::findOrFail($id);
-        $codePath = base_path("app/sonarqube_projects/project_{$id}");
 
-        if (!File::exists($codePath)) {
-            return back()->with('error', '❌ Code folder not found.');
+        
+        $project = Project::findOrFail($id);
+        //dd($project);
+        // 1. فك الضغط من zip
+        $zipFileName = "project_{$project->id}.zip";
+        $zipPath = storage_path("app/sonarqube_zips/{$zipFileName}");
+        $tmpExtractPath = storage_path("app/sonarqube_projects/tmp_project_{$project->id}");
+
+        if (!file_exists($zipPath)) {
+            Log::warning("❌ ZIP archive not found at path: $zipPath");
+            return redirect()->route('supervisor.accepted-projects')->with('error', '❌ ZIP archive not found. Make sure the project was downloaded.');
+        }
+        
+        if (!file_exists($tmpExtractPath)) {
+            mkdir($tmpExtractPath, 0777, true);
         }
 
-        // إعداد ملف sonar-project.properties
+        $zip = new \ZipArchive;
+        if ($zip->open($zipPath) === true) {
+            $zip->extractTo($tmpExtractPath);
+            $zip->close();
+        } else {
+            return back()->with('error', '❌ Failed to extract ZIP archive.');
+        }
+
+        $entries = array_values(array_diff(scandir($tmpExtractPath), ['.', '..']));
+        $subfolder = $entries[0] ?? null;
+
+        if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
+            return back()->with('error', '❌ Unexpected ZIP structure.');
+        }
+
+        $finalExtractPath = storage_path("app/sonarqube_projects/project_{$project->id}");
+        if (!file_exists($finalExtractPath)) {
+            mkdir($finalExtractPath, 0777, true);
+        }
+
+        File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
+        File::deleteDirectory($tmpExtractPath);
+
+        // 2. إنشاء ملف sonar-project.properties
         $props = <<<EOL
-        sonar.projectKey=project_{$id}
+        sonar.projectKey=project_{$project->id}
         sonar.projectName={$project->title}
         sonar.projectVersion=1.0
         sonar.sources=.
@@ -179,36 +202,33 @@ class ProjectController extends Controller
         sonar.login=squ_cfa867d438a1c77f4faed40ef162cf348b460374
         EOL;
 
-        file_put_contents("{$codePath}/sonar-project.properties", $props);
+        file_put_contents("{$finalExtractPath}/sonar-project.properties", $props);
 
-        // تنفيذ أمر sonar-scanner داخل مجلد الكود
-        $process = new Process(['sonar-scanner'], $codePath);
-        $process->setTimeout(300); // 5 دقائق
+        // 3. تنفيذ تحليل SonarQube
+        $process = new Process(['sonar-scanner'], $finalExtractPath);
+        $process->setTimeout(300);
         $process->run();
 
         if (!$process->isSuccessful()) {
             return back()->with('error', '❌ SonarQube analysis failed: ' . $process->getErrorOutput());
         }
 
-        // جلب النتائج من SonarQube
-        $sonarProjectKey = "project_{$id}";
+        // 4. جلب النتائج
         $sonarToken = 'squ_cfa867d438a1c77f4faed40ef162cf348b460374';
-
         $response = Http::withBasicAuth($sonarToken, '')
             ->get("http://localhost:9000/api/measures/component", [
-                'component' => $sonarProjectKey,
+                'component' => "project_{$project->id}",
                 'metricKeys' => 'bugs,vulnerabilities,code_smells,coverage',
             ]);
 
         if ($response->failed() || !isset($response['component']['measures'])) {
-            return back()->with('error', '❌ Failed to fetch analysis results from SonarQube.');
+            return back()->with('error', '❌ Failed to fetch analysis results.');
         }
 
         $measures = collect($response['component']['measures'])->keyBy('metric');
 
-        // حفظ النتائج في جدول report
         CodeAnalysisReport::updateOrCreate(
-            ['project_id' => $id],
+            ['project_id' => $project->id],
             [
                 'bugs' => (int) ($measures['bugs']['value'] ?? 0),
                 'vulnerabilities' => (int) ($measures['vulnerabilities']['value'] ?? 0),
@@ -217,9 +237,9 @@ class ProjectController extends Controller
             ]
         );
 
-        return back()->with('success', '✅ Code analyzed and results saved to database!');
-        //return redirect()->route('supervisor.accepted-projects')->with('success', '✅ Code analyzed and results saved to database!');
+        return redirect()->route('supervisor.accepted-projects')->with('success', '✅ Code analyzed and saved!');
     }
+
 
     public function plagiarism($id) {
         // TODO: استدعاء MOSS أو Codequiry لاحقاً

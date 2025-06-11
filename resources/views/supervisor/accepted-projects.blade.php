@@ -26,9 +26,18 @@
                             </a>
                         </td>
                         <td>
-                            <a href="{{ route('projects.analyze', $project->id) }}" class="btn btn-sm btn-outline-primary">🔍 Code Analysis</a>
-                            <a href="{{ route('projects.plagiarism', $project->id) }}" class="btn btn-sm btn-outline-warning">🔎 Plagiarism</a>
-                            <a href="{{ route('projects.evaluate', $project->id) }}" class="btn btn-sm btn-outline-success">📝 Evaluate</a>
+                            <form action="{{ route('projects.analyze', $project->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-sm btn-outline-primary">🔍 Code Analysis</button>
+                            </form>
+                            <form action="{{ route('projects.plagiarism', $project->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-sm btn-outline-primary">🔎 Plagiarism</button>
+                            </form>
+                            <form action="{{ route('projects.evaluate', $project->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-sm btn-outline-primary">📝 Evaluate</button>
+                            </form>
                         </td>
                     </tr>
                 @endforeach
