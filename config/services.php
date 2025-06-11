@@ -14,6 +14,12 @@ return [
     |
     */
 
+    'sonarqube' => [
+        'url' => env('SONARQUBE_URL'),
+        'token' => env('SONARQUBE_TOKEN'),
+    ],
+
+
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
     ],

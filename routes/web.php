@@ -35,7 +35,14 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/supervisor/requests', [SupervisorRequestController::class, 'indexForSupervisor'])->name('supervisor.requests');
     Route::post('/supervisor/requests/{id}/{action}', [SupervisorRequestController::class, 'respond'])->name('supervisor.request.respond');
+
+    Route::get('/supervisor/accepted-projects', [ProjectController::class, 'acceptedProjects'])->name('supervisor.accepted-projects');
 });
+
+Route::get('/projects/{id}/analyze', [ProjectController::class, 'analyze'])->name('projects.analyze');
+Route::get('/projects/{id}/plagiarism', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism');
+Route::get('/projects/{id}/evaluate', [ProjectController::class, 'evaluate'])->name('projects.evaluate');
+
 
 
 
