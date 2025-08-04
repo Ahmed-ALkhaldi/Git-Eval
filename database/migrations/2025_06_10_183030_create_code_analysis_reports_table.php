@@ -18,6 +18,9 @@ return new class extends Migration
             $table->integer('vulnerabilities')->default(0);
             $table->integer('code_smells')->default(0);
             $table->float('coverage')->nullable();
+            $table->float('duplicated_lines_density')->default(0);
+            $table->integer('lines_of_code')->default(0);
+            $table->integer('security_hotspots')->default(0);
             $table->timestamps();
         });
 

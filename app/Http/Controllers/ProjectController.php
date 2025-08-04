@@ -14,6 +14,9 @@ use App\Models\Project;
 use App\Models\Repository;
 use App\Models\commits;
 use App\Models\CodeAnalysisReport;
+use App\Models\PlagiarismCheck;
+use App\Services\SonarQubeService;
+use App\Services\MossService;
 use ZipArchive;
 use Carbon\Carbon;
 
@@ -21,6 +24,8 @@ use Carbon\Carbon;
 
 class ProjectController extends Controller
 {
+    
+
     public function index() {
 
     } // List all projects (for supervisor or admin)
@@ -31,7 +36,8 @@ class ProjectController extends Controller
     }
 
 
-    public function store(Request $request){
+    public function store(Request $request)
+    {
         set_time_limit(180);
 
         if (!Auth::check() || Auth::user()->role !== 'student') {
@@ -56,20 +62,14 @@ class ProjectController extends Controller
         $repoName = $this->extractRepoName($repoUrl);
         $parsed = $this->parseGitHubUrl($repoUrl);
 
-        $repoResponse = null;
-        $commitsResponse = null;
+        $repoResponse = Http::withHeaders(['User-Agent' => 'Laravel'])
+            ->get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
 
-        if ($parsed) {
-            $repoResponse = Http::withHeaders(['User-Agent' => 'Laravel'])
-                ->get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
-            $commitsResponse = Http::get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}/commits");
-        }
-
-        if (!$repoResponse || !$repoResponse->ok()) {
+        if (!$repoResponse->ok()) {
             return redirect()->back()->with('error', '❌ Failed to fetch GitHub repository info.');
         }
 
-        $repoData = [
+        $repository = Repository::create([
             'project_id' => $project->id,
             'github_url' => $repoUrl,
             'repo_name' => $repoName,
@@ -77,24 +77,9 @@ class ProjectController extends Controller
             'stars' => $repoResponse['stargazers_count'] ?? 0,
             'forks' => $repoResponse['forks_count'] ?? 0,
             'open_issues' => $repoResponse['open_issues_count'] ?? 0,
-        ];
+        ]);
 
-        $repository = Repository::create($repoData);
-
-        if ($commitsResponse && $commitsResponse->ok()) {
-            foreach ($commitsResponse->json() as $commit) {
-                commits::create([
-                    'repository_id' => $repository->id,
-                    'commit_sha' => $commit['sha'],
-                    'author_name' => $commit['commit']['author']['name'],
-                    'author_email' => $commit['commit']['author']['email'] ?? null,
-                    'commit_date' => Carbon::parse($commit['commit']['author']['date'])->format('Y-m-d H:i:s'),
-                    'message' => $commit['commit']['message'],
-                ]);
-            }
-        }
-
-        // ✅ تحميل ملف ZIP فقط (بدون فك الضغط)
+        // تحميل ملف ZIP فقط
         $defaultBranch = $repoResponse['default_branch'] ?? 'main';
         $zipUrl = "https://github.com/{$parsed['user']}/{$parsed['repo']}/archive/refs/heads/{$defaultBranch}.zip";
         $zipFileName = "project_{$project->id}.zip";
@@ -104,18 +89,14 @@ class ProjectController extends Controller
             return redirect()->back()->with('error', '❌ Failed to download the GitHub ZIP archive.');
         }
 
-        Storage::put("sonarqube_zips/{$zipFileName}", $zipContents);
+        Storage::put("zips/{$zipFileName}", $zipContents);
 
-        // ربط الطلاب
         $studentIds = $request->students ?? [];
         $studentIds[] = Auth::id();
         $project->students()->attach($studentIds);
 
         return redirect()->route('dashboard.student')->with('success', '✅ Project created and ZIP downloaded!');
     }
-
-
-
 
 
     private function extractRepoName($url){
@@ -146,104 +127,213 @@ class ProjectController extends Controller
     }
 
 
-    public function analyze($id)
+    private function ensureProjectExtracted($projectId)
     {
+        // 📦 مسار ملف الـ ZIP (تم حفظه في storage/app/private/zips)
+        $zipPath = storage_path("app/private/zips/project_{$projectId}.zip");
 
-        
-        $project = Project::findOrFail($id);
-        //dd($project);
-        // 1. فك الضغط من zip
-        $zipFileName = "project_{$project->id}.zip";
-        $zipPath = storage_path("app/sonarqube_zips/{$zipFileName}");
-        $tmpExtractPath = storage_path("app/sonarqube_projects/tmp_project_{$project->id}");
+        // 🗂️ المسارات المؤقتة والنهائية
+        $tmpExtractPath = storage_path("app/projects/tmp_project_{$projectId}");
+        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
 
-        if (!file_exists($zipPath)) {
-            Log::warning("❌ ZIP archive not found at path: $zipPath");
-            return redirect()->route('supervisor.accepted-projects')->with('error', '❌ ZIP archive not found. Make sure the project was downloaded.');
+        // ✅ إذا كان المشروع مستخرج مسبقًا، لا حاجة لإعادة الفك
+        if (file_exists($finalExtractPath) && count(glob("$finalExtractPath/*"))) {
+            \Log::info("✅ Project {$projectId} already extracted.");
+            return;
         }
-        
+
+        // ❌ تحقق من وجود الملف ZIP
+        if (!file_exists($zipPath)) {
+            throw new \Exception("❌ ZIP archive not found for project {$projectId}");
+        }
+
+        // 🗂️ أنشئ مجلد مؤقت إن لم يكن موجودًا
         if (!file_exists($tmpExtractPath)) {
             mkdir($tmpExtractPath, 0777, true);
         }
 
+        // 🔓 فك الضغط
         $zip = new \ZipArchive;
         if ($zip->open($zipPath) === true) {
             $zip->extractTo($tmpExtractPath);
             $zip->close();
         } else {
-            return back()->with('error', '❌ Failed to extract ZIP archive.');
+            throw new \Exception("❌ Failed to extract ZIP for project {$projectId}");
         }
 
+        // 📂 تحقق من البنية: احصل على المجلد الرئيسي المستخرج
         $entries = array_values(array_diff(scandir($tmpExtractPath), ['.', '..']));
         $subfolder = $entries[0] ?? null;
 
         if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
-            return back()->with('error', '❌ Unexpected ZIP structure.');
+            throw new \Exception("❌ Unexpected ZIP structure for project {$projectId}");
         }
 
-        $finalExtractPath = storage_path("app/sonarqube_projects/project_{$project->id}");
-        if (!file_exists($finalExtractPath)) {
-            mkdir($finalExtractPath, 0777, true);
+        // 🗑️ احذف أي نسخة سابقة للمجلد النهائي
+        if (file_exists($finalExtractPath)) {
+            \File::deleteDirectory($finalExtractPath);
         }
 
-        File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
-        File::deleteDirectory($tmpExtractPath);
+        mkdir($finalExtractPath, 0777, true);
 
-        // 2. إنشاء ملف sonar-project.properties
+        // ✅ انسخ الملفات إلى المجلد النهائي
+        \File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
+
+        // 🧹 احذف المجلد المؤقت
+        \File::deleteDirectory($tmpExtractPath);
+
+        \Log::info("✅ Project {$projectId} extracted to {$finalExtractPath}");
+    }
+
+
+
+    public function analyze($id)
+    {
+        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+            abort(403, '❌ Access denied. Supervisors only.');
+        }
+
+        $service2 = new \App\Services\SonarQubeService();
+        if (!$service2->isSonarQubeRunning()) {
+            \Log::error('❌ SonarQube is not running. Please start the server at http://localhost:9000');
+            throw new \Exception('SonarQube is not running. Please start the server at http://localhost:9000');
+        }
+
+        $project = Project::findOrFail($id);
+
+        // ✅ تأكد أن المشروع مفكوك
+        $this->ensureProjectExtracted($project->id);
+
+        $finalExtractPath = storage_path("app/projects/project_{$project->id}");
+
+        // 🔹 إنشاء sonar-project.properties
         $props = <<<EOL
         sonar.projectKey=project_{$project->id}
         sonar.projectName={$project->title}
         sonar.projectVersion=1.0
         sonar.sources=.
-        sonar.language=php
         sonar.sourceEncoding=UTF-8
-        sonar.php.exclusions=vendor/**,node_modules/**,storage/**
+        sonar.inclusions=**/*.php
+        sonar.exclusions=vendor/**,node_modules/**,storage/**,bootstrap/**,public/**,tests/**
+        sonar.scm.disabled=true
         sonar.host.url=http://localhost:9000
-        sonar.login=squ_cfa867d438a1c77f4faed40ef162cf348b460374
+        sonar.token=squ_cfa867d438a1c77f4faed40ef162cf348b460374
         EOL;
 
         file_put_contents("{$finalExtractPath}/sonar-project.properties", $props);
 
-        // 3. تنفيذ تحليل SonarQube
-        $process = new Process(['sonar-scanner'], $finalExtractPath);
+        // 🔹 تشغيل sonar-scanner
+        $env = [
+            'JAVA_HOME' => 'C:\Program Files\Java\jdk-17',
+            'TEMP' => 'C:\Users\HP\AppData\Local\Temp',
+            'TMP' => 'C:\Users\HP\AppData\Local\Temp',
+            'PATH' => 'C:\Program Files\Java\jdk-17\bin;' . getenv('PATH'),
+        ];
+        $process = new \Symfony\Component\Process\Process(['C:\sonar-scanner-4.3.0.2102-windows\bin\sonar-scanner.bat'], $finalExtractPath, $env);
         $process->setTimeout(300);
         $process->run();
 
         if (!$process->isSuccessful()) {
+            \Log::error("❌ SonarQube analysis failed: " . $process->getErrorOutput());
             return back()->with('error', '❌ SonarQube analysis failed: ' . $process->getErrorOutput());
         }
 
-        // 4. جلب النتائج
-        $sonarToken = 'squ_cfa867d438a1c77f4faed40ef162cf348b460374';
-        $response = Http::withBasicAuth($sonarToken, '')
-            ->get("http://localhost:9000/api/measures/component", [
-                'component' => "project_{$project->id}",
-                'metricKeys' => 'bugs,vulnerabilities,code_smells,coverage',
-            ]);
+        // 🔹 جلب النتائج من الخدمة
+        $service = new \App\Services\SonarQubeService();
+        $results = $service->analyzeProject("project_{$project->id}");
 
-        if ($response->failed() || !isset($response['component']['measures'])) {
-            return back()->with('error', '❌ Failed to fetch analysis results.');
+        if (!$results) {
+            return back()->with('error', '❌ Failed to fetch SonarQube analysis results.');
         }
 
-        $measures = collect($response['component']['measures'])->keyBy('metric');
+        // 🔹 حفظ النتائج
+        CodeAnalysisReport::updateOrCreate(['project_id' => $project->id], $results);
 
-        CodeAnalysisReport::updateOrCreate(
-            ['project_id' => $project->id],
-            [
-                'bugs' => (int) ($measures['bugs']['value'] ?? 0),
-                'vulnerabilities' => (int) ($measures['vulnerabilities']['value'] ?? 0),
-                'code_smells' => (int) ($measures['code_smells']['value'] ?? 0),
-                'coverage' => isset($measures['coverage']['value']) ? floatval($measures['coverage']['value']) : null,
-            ]
-        );
-
-        return redirect()->route('supervisor.accepted-projects')->with('success', '✅ Code analyzed and saved!');
+        return redirect()->route('dashboard.supervisor')->with('success', '✅ Code analyzed and saved!');
     }
 
 
-    public function plagiarism($id) {
-        // TODO: استدعاء MOSS أو Codequiry لاحقاً
-        return "🔎 Plagiarism check for project ID {$id}";
+
+    public function plagiarism($id)
+    {
+        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+            abort(403, '❌ Access denied. Supervisors only.');
+        }
+
+        // المشروع الأساسي
+        $project1 = Project::findOrFail($id);
+
+        // جميع المشاريع الأخرى باستثناء المشروع المحدد
+        $otherProjects = Project::where('id', '!=', $id)->get();
+
+        return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
+    }
+
+    public function checkPlagiarism(Request $request)
+    {
+        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+            abort(403, '❌ Access denied. Supervisors only.');
+        }
+
+        $request->validate([
+            'project1_id' => 'required|different:project2_id|exists:projects,id',
+            'project2_id' => 'required|exists:projects,id',
+        ]);
+
+        $project1 = Project::findOrFail($request->project1_id);
+        $project2 = Project::findOrFail($request->project2_id);
+
+        // ✅ تأكد أن المشروعين تم فك ضغطهما
+        $this->ensureProjectExtracted($project1->id);
+        $this->ensureProjectExtracted($project2->id);
+
+        // ✅ اجمع كل الملفات المطلوبة (php, blade, css, js)
+        $files1 = glob(storage_path("app/projects/project_{$project1->id}/**/*.{php,blade.php,js,css}"), GLOB_BRACE);
+        $files2 = glob(storage_path("app/projects/project_{$project2->id}/**/*.{php,blade.php,js,css}"), GLOB_BRACE);
+
+        if (empty($files1) || empty($files2)) {
+            return back()->with('error', '❌ Project files not found for comparison.');
+        }
+
+        // ✅ استدعاء خدمة MOSS
+        $moss = new \App\Services\MossService();
+        \Log::info("🔍 Running MOSS for Project {$project1->id} vs Project {$project2->id}");
+        $result = $moss->compareProjects($files1, $files2);
+
+        if (!$result) {
+            return back()->with('error', '❌ Failed to generate plagiarism report.');
+        }
+
+        // ✅ حفظ النتيجة في قاعدة البيانات
+        $report = \App\Models\PlagiarismCheck::create([
+            'project1_id' => $project1->id,
+            'project2_id' => $project2->id,
+            'similarity_percentage' => $result['average_similarity'],
+            'matches' => json_encode($result['details']),
+        ]);
+
+        // ✅ إعادة التوجيه لعرض التقرير
+        return redirect()->route('projects.plagiarism.report', $report->id)
+                        ->with('success', '✅ Plagiarism report generated successfully.');
+    }
+
+
+
+
+
+
+    public function viewPlagiarismReport($id)
+    {
+        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+            abort(403, '❌ Access denied. Supervisors only.');
+        }
+
+        $report = \App\Models\PlagiarismCheck::findOrFail($id);
+
+        return view('supervisor.plagiarism-result', [
+            'report' => $report,
+            'matches' => json_decode($report->matches, true),
+        ]);
     }
 
     public function evaluate($id) {

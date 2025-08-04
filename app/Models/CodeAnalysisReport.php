@@ -9,6 +9,8 @@ class CodeAnalysisReport extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['project_id', 'bugs', 'vulnerabilities', 'code_smells', 'coverage'];
+    protected $fillable = [
+        'project_id', 'bugs', 'vulnerabilities', 'code_smells', 'coverage', 'duplicated_lines_density'
+    ];
 
 }

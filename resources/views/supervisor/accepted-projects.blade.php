@@ -30,7 +30,7 @@
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-outline-primary">🔍 Code Analysis</button>
                             </form>
-                            <form action="{{ route('projects.plagiarism', $project->id) }}" method="POST" style="display:inline;">
+                            <form action="{{ route('projects.plagiarism.form', $project->id) }}" method="GET" style="display:inline;">
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-outline-primary">🔎 Plagiarism</button>
                             </form>

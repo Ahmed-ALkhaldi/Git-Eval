@@ -37,11 +37,19 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/supervisor/requests/{id}/{action}', [SupervisorRequestController::class, 'respond'])->name('supervisor.request.respond');
 
     Route::get('/supervisor/accepted-projects', [ProjectController::class, 'acceptedProjects'])->name('supervisor.accepted-projects');
+
+    Route::post('/projects/{id}/analyze', [ProjectController::class, 'analyze'])->name('projects.analyze');
+    Route::get('/projects/{id}/plagiarism', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism');
+
+
+    Route::get('/supervisor/plagiarism-check/{project1}', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism.form');
+    Route::post('/supervisor/plagiarism-check', [ProjectController::class, 'checkPlagiarism'])->name('projects.plagiarism.check');
+    Route::get('/supervisor/plagiarism-report/{id}', [ProjectController::class, 'viewPlagiarismReport'])->name('projects.plagiarism.report');
+
+    Route::get('/projects/{id}/evaluate', [ProjectController::class, 'evaluate'])->name('projects.evaluate');
 });
 
-Route::post('/projects/{id}/analyze', [ProjectController::class, 'analyze'])->name('projects.analyze');
-Route::get('/projects/{id}/plagiarism', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism');
-Route::get('/projects/{id}/evaluate', [ProjectController::class, 'evaluate'])->name('projects.evaluate');
+
 
 
 

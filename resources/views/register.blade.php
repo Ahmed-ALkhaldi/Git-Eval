@@ -22,16 +22,16 @@
     <form method="POST" action="{{ route('register') }}">
         @csrf
 
-        <label>الاسم:</label><br>
+        <label>Name:</label><br>
         <input type="text" name="name" required><br><br>
 
-        <label>البريد الإلكتروني:</label><br>
+        <label>Email:</label><br>
         <input type="email" name="email" required><br><br>
 
-        <label>كلمة المرور:</label><br>
+        <label>Password:</label><br>
         <input type="password" name="password" required><br><br>
 
-        <label>تأكيد كلمة المرور:</label><br>
+        <label>Rewrite Password:</label><br>
         <input type="password" name="password_confirmation" required><br><br>
 
         <label for="role">Select Role:</label>
@@ -44,9 +44,9 @@
             -->
         </select><br><br>
 
-        <button type="submit">تسجيل</button>
+        <button type="submit">Register</button>
     </form>
 
-    <p>هل لديك حساب بالفعل؟ <a href="{{ route('auth.login') }}">تسجيل الدخول</a></p>
+    <p> Already have an account? <a href="{{ route('auth.login') }}"> Login </a></p>
 </body>
 </html>

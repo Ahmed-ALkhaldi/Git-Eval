@@ -1,0 +1,23 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class PlagiarismCheck extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'project1_id',
+        'project2_id',
+        'similarity_percentage',
+        'matches',
+    ];
+    
+    public function project()
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+}
