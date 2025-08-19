@@ -1,16 +1,34 @@
 
 <div class="container">
-    <h3>📄 Plagiarism Report</h3>
+    @if(!empty($report->report_url))
+  <p>📄 Full MOSS report: <a href="{{ $report->report_url }}" target="_blank" rel="noopener">Open</a></p>
+    @endif
 
-    <p><strong>Similarity:</strong> {{ $report->similarity_percentage }}%</p>
+    <p>Similarity: {{ round($report->similarity_percentage, 2) }}%</p>
 
-    <h4>🔹 Matches:</h4>
-    <ul>
-        @foreach($matches as $match)
-            <li>
-                <a href="{{ $match['link'] }}" target="_blank">{{ $match['file'] }}</a>
-                - {{ $match['percentage'] }}%
-            </li>
-        @endforeach
-    </ul>
+    @if($matches = json_decode($report->matches, true))
+    @if(count($matches))
+        <table>
+        <thead>
+            <tr>
+            <th>File 1</th><th>%</th><th>File 2</th><th>%</th><th>Lines</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($matches as $m)
+            <tr>
+                <td><a href="{{ $m['file1_link'] ?? '#' }}" target="_blank">{{ $m['file1'] ?? '' }}</a></td>
+                <td>{{ $m['p1'] ?? '' }}</td>
+                <td><a href="{{ $m['file2_link'] ?? '#' }}" target="_blank">{{ $m['file2'] ?? '' }}</a></td>
+                <td>{{ $m['p2'] ?? '' }}</td>
+                <td>{{ $m['lines'] ?? '' }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+        </table>
+    @else
+        <p>🔹 No detailed matches were extracted. Try opening the full report above.</p>
+    @endif
+    @endif
+
 </div>

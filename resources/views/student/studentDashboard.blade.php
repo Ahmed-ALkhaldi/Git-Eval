@@ -20,8 +20,8 @@
                 <p>Here you can view and manage your graduation project, commits, and evaluations.</p>
 
                 <a href="#" class="btn btn-success">View My Project</a>
-                <a href="#" class="btn btn-outline-primary">My Commits</a>
-                <a href="#" class="btn btn-outline-secondary">Evaluation Report</a>
+                {{-- <a href="#" class="btn btn-outline-primary">My Commits</a>
+                <a href="#" class="btn btn-outline-secondary">Evaluation Report</a> --}}
                 <a href="{{ route('projects.create') }}" class="btn btn-primary">+ Add New Project</a>
                 <a href="{{ route('supervisors.list') }}" class="btn btn-primary">🔍 View Available Supervisors</a>
 

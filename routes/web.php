@@ -42,9 +42,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/projects/{id}/plagiarism', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism');
 
 
-    Route::get('/supervisor/plagiarism-check/{project1}', [ProjectController::class, 'plagiarism'])->name('projects.plagiarism.form');
-    Route::post('/supervisor/plagiarism-check', [ProjectController::class, 'checkPlagiarism'])->name('projects.plagiarism.check');
-    Route::get('/supervisor/plagiarism-report/{id}', [ProjectController::class, 'viewPlagiarismReport'])->name('projects.plagiarism.report');
+    Route::get('/supervisor/plagiarism-check/{project1}', [PlagiarismCheckController::class, 'plagiarism'])->name('projects.plagiarism.form');
+    Route::post('/supervisor/plagiarism-check', [PlagiarismCheckController::class, 'checkPlagiarism'])->name('projects.plagiarism.check');
+    Route::get('/supervisor/plagiarism-report/{id}', [PlagiarismCheckController::class, 'viewPlagiarismReport'])->name('projects.plagiarism.report');
 
     Route::get('/projects/{id}/evaluate', [ProjectController::class, 'evaluate'])->name('projects.evaluate');
 });

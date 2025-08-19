@@ -253,93 +253,85 @@ class ProjectController extends Controller
     }
 
 
-
-    public function plagiarism($id)
-    {
-        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
-            abort(403, '❌ Access denied. Supervisors only.');
-        }
-
-        // المشروع الأساسي
-        $project1 = Project::findOrFail($id);
-
-        // جميع المشاريع الأخرى باستثناء المشروع المحدد
-        $otherProjects = Project::where('id', '!=', $id)->get();
-
-        return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
-    }
-
-    public function checkPlagiarism(Request $request)
-    {
-        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
-            abort(403, '❌ Access denied. Supervisors only.');
-        }
-
-        $request->validate([
-            'project1_id' => 'required|different:project2_id|exists:projects,id',
-            'project2_id' => 'required|exists:projects,id',
-        ]);
-
-        $project1 = Project::findOrFail($request->project1_id);
-        $project2 = Project::findOrFail($request->project2_id);
-
-        // ✅ تأكد أن المشروعين تم فك ضغطهما
-        $this->ensureProjectExtracted($project1->id);
-        $this->ensureProjectExtracted($project2->id);
-
-        // ✅ اجمع كل الملفات المطلوبة (php, blade, css, js)
-        $files1 = glob(storage_path("app/projects/project_{$project1->id}/**/*.{php,blade.php,js,css}"), GLOB_BRACE);
-        $files2 = glob(storage_path("app/projects/project_{$project2->id}/**/*.{php,blade.php,js,css}"), GLOB_BRACE);
-
-        if (empty($files1) || empty($files2)) {
-            return back()->with('error', '❌ Project files not found for comparison.');
-        }
-
-        // ✅ استدعاء خدمة MOSS
-        $moss = new \App\Services\MossService();
-        \Log::info("🔍 Running MOSS for Project {$project1->id} vs Project {$project2->id}");
-        $result = $moss->compareProjects($files1, $files2);
-
-        if (!$result) {
-            return back()->with('error', '❌ Failed to generate plagiarism report.');
-        }
-
-        // ✅ حفظ النتيجة في قاعدة البيانات
-        $report = \App\Models\PlagiarismCheck::create([
-            'project1_id' => $project1->id,
-            'project2_id' => $project2->id,
-            'similarity_percentage' => $result['average_similarity'],
-            'matches' => json_encode($result['details']),
-        ]);
-
-        // ✅ إعادة التوجيه لعرض التقرير
-        return redirect()->route('projects.plagiarism.report', $report->id)
-                        ->with('success', '✅ Plagiarism report generated successfully.');
-    }
-
-
-
-
-
-
-    public function viewPlagiarismReport($id)
-    {
-        if (!Auth::check() || Auth::user()->role !== 'supervisor') {
-            abort(403, '❌ Access denied. Supervisors only.');
-        }
-
-        $report = \App\Models\PlagiarismCheck::findOrFail($id);
-
-        return view('supervisor.plagiarism-result', [
-            'report' => $report,
-            'matches' => json_decode($report->matches, true),
-        ]);
-    }
-
     public function evaluate($id) {
         // TODO: حساب معدل التقييم وعرضه
         return "📝 Evaluation for project ID {$id}";
     }
+
+
+    // //Choos project to compare with
+    // public function plagiarism($id)
+    // {
+    //     if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+    //         abort(403, '❌ Access denied. Supervisors only.');
+    //     }
+
+    //     // المشروع الأساسي
+    //     $project1 = Project::findOrFail($id);
+
+    //     // جميع المشاريع الأخرى باستثناء المشروع المحدد
+    //     $otherProjects = Project::where('id', '!=', $id)->get();
+
+    //     return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
+    // }
+
+    // public function checkPlagiarism(Request $request)
+    // {
+        
+    //     $request->validate([
+    //         'project1_id' => 'required|different:project2_id|exists:projects,id',
+    //         'project2_id' => 'required|exists:projects,id',
+    //     ]);
+
+    //     $project1 = Project::findOrFail($request->project1_id);
+    //     $project2 = Project::findOrFail($request->project2_id);
+
+    //     // تأكد من فك الضغط
+    //     $this->ensureProjectExtracted($project1->id);
+    //     $this->ensureProjectExtracted($project2->id);
+
+    //     $dir1 = storage_path("app/projects/project_{$project1->id}");
+    //     $dir2 = storage_path("app/projects/project_{$project2->id}");
+
+    //     \Log::info("🔍 Starting plagiarism check using MOSS for: $dir1 vs $dir2");
+
+    //     $moss = new \App\Services\MossService();
+    //     $result = $moss->compareProjects($dir1, $dir2);
+
+    //     if (!$result) {
+    //         \Log::error('❌ MOSS comparison failed, no results were generated.');
+    //         return back()->with('error', '❌ Failed to generate plagiarism report. Please try again.');
+    //     }
+
+    //     $report = \App\Models\PlagiarismCheck::create([
+    //         'project1_id' => $project1->id,
+    //         'project2_id' => $project2->id,
+    //         'similarity_percentage' => $result['average_similarity'],
+    //         'matches' => json_encode($result['details']),
+    //         'report_url'            => $result['report_url'] ?? null,
+    //     ]);
+
+    //     \Log::info("✅ Plagiarism report successfully saved. Redirecting to report ID {$report->id}");
+
+    //     return redirect()->route('projects.plagiarism.report', $report->id)
+    //         ->with('success', '✅ Plagiarism report generated successfully.');
+    // }
+
+    // public function viewPlagiarismReport($id)
+    // {
+    //     if (!Auth::check() || Auth::user()->role !== 'supervisor') {
+    //         abort(403, '❌ Access denied. Supervisors only.');
+    //     }
+
+    //     $report = \App\Models\PlagiarismCheck::findOrFail($id);
+
+    //     return view('supervisor.plagiarism-result', [
+    //         'report' => $report,
+    //         'matches' => json_decode($report->matches, true),
+    //     ]);
+    // }
+
+    
 
 
 

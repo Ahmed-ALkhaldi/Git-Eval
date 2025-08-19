@@ -12,48 +12,58 @@ if "%~2"=="" (
 
 set "PROJ1=%~1"
 set "PROJ2=%~2"
-set "FILELIST=files.txt"
-del "%FILELIST%" 2>nul
+set "MERGED1=%~dp0merged_project1.php"
+set "MERGED2=%~dp0merged_project2.php"
+set "RESULT_FILE=%~dp0moss_result.txt"
+
+del "%MERGED1%" 2>nul
+del "%MERGED2%" 2>nul
+del "%RESULT_FILE%" 2>nul
+del "%~dp0moss_output.log" 2>nul
 
 set INCLUDE_DIRS=app\Http\Controllers app\Models resources\views
 
-:: ✅ جمع الملفات من المشروع الأول
+echo 🔍 [DEBUG] Collecting files from Project 1...
 for %%i in (%INCLUDE_DIRS%) do (
     set "SCAN_DIR=%PROJ1%\%%i"
-    call :scanDir "!SCAN_DIR!"
+    if exist "!SCAN_DIR!" call :merge "!SCAN_DIR!" "%MERGED1%"
 )
 
-:: ✅ جمع الملفات من المشروع الثاني
+echo 🔍 [DEBUG] Collecting files from Project 2...
 for %%i in (%INCLUDE_DIRS%) do (
     set "SCAN_DIR=%PROJ2%\%%i"
-    call :scanDir "!SCAN_DIR!"
+    if exist "!SCAN_DIR!" call :merge "!SCAN_DIR!" "%MERGED2%"
 )
 
-if not exist "%FILELIST%" (
-    echo ❌ No student files were collected. Check project structure.
+if not exist "%MERGED1%" (
+    echo ❌ No files found for Project 1.
+    exit /b
+)
+if not exist "%MERGED2%" (
+    echo ❌ No files found for Project 2.
     exit /b
 )
 
-:: ✅ تشغيل MOSS باستخدام ascii + m1
-set CMD=perl moss.pl -l ascii -m 1 -d
-for /f "usebackq delims=" %%i in ("%FILELIST%") do (
-    set CMD=!CMD! "%%i"
+echo 🚀 Running MOSS (only key files)...
+"C:\Strawberry\perl\bin\perl.exe" "%~dp0moss.pl" -l ascii -m 10 "%MERGED1%" "%MERGED2%" > "%~dp0moss_output.log" 2>&1
+
+:: ✅ البحث عن الرابط داخل الملف
+findstr /R "http[s]*://moss" "%~dp0moss_output.log" > "%RESULT_FILE%"
+
+:: ✅ إذا لم يتم العثور على الرابط، انسخ السجل بالكامل للفحص اليدوي
+if %ERRORLEVEL% NEQ 0 (
+    type "%~dp0moss_output.log" >> "%RESULT_FILE%"
 )
 
-echo 🚀 Running MOSS (student code only)...
-%CMD%
-
-if exist "%FILELIST%" del "%FILELIST%"
-endlocal
+type "%RESULT_FILE%"
 exit /b
 
-:scanDir
+:merge
 set "TARGET=%~1"
-if exist "%TARGET%" (
-    echo ✅ Scanning folder: %TARGET%
-    for /r "%TARGET%" %%f in (*.php *.blade.php *.css *.js) do (
-        echo [ADD] %%f
-        >>"%FILELIST%" echo %%f
-    )
+set "OUTFILE=%~2"
+echo ✅ Collecting from: %TARGET%
+for /r "%TARGET%" %%f in (*.php *.blade.php *.css *.js) do (
+    type "%%f" >> "%OUTFILE%"
+    echo.>>"%OUTFILE%"
 )
 exit /b
