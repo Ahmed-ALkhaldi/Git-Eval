@@ -17,7 +17,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('auth.login.submit') }}">
+    <form method="POST" action="{{ route('auth.login') }}">
         @csrf
         <input type="email" name="email" placeholder="Email" required><br><br>
         <input type="password" name="password" placeholder="Password" required><br><br>
