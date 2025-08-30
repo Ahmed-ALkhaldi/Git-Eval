@@ -2,49 +2,52 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
-
+// use Laravel\Sanctum\HasApiTokens; // فعّلها لو بتستخدم Sanctum
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
-    
-    // علاقة Many-to-Many مع المشاريع (للطلاب فقط)
-    public function projects()
-    {
-        return $this->belongsToMany(Project::class, 'project_user');
-    }
+    // use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
-
-    // علاقة One-to-Many للمشرف
-    public function supervisedProjects()
-    {
-        return $this->hasMany(Project::class, 'supervisor_id');
-    }
-    
     protected $fillable = [
-        'name',
+        'first_name',
+        'last_name',
         'email',
         'password',
-        'role',
+        'role', // student | supervisor | admin
     ];
 
-    
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    protected function casts(): array
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+    ];
+
+    /** علاقات */
+    public function student()
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return $this->hasOne(Student::class);
     }
 
+    public function supervisor()
+    {
+        return $this->hasOne(Supervisor::class);
+    }
+
+    /** أدوات مساعدة للأدوار */
+    public function isStudent(): bool   { return $this->role === 'student'; }
+    public function isSupervisor(): bool{ return $this->role === 'supervisor'; }
+    public function isAdmin(): bool     { return $this->role === 'admin'; }
+
+    /** اسم كامل */
+    public function getFullNameAttribute(): string
+    {
+        return trim($this->first_name.' '.$this->last_name);
+    }
 }
