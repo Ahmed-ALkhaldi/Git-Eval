@@ -14,6 +14,7 @@ class PlagiarismCheck extends Model
         'project2_id',
         'similarity_percentage',
         'matches',
+        'report_url',
     ];
     
     public function project()

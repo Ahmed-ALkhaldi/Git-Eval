@@ -17,6 +17,9 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('password');
             $table->enum('role', ['student', 'supervisor', 'admin'])->default('student');
+            $table->enum('university', ['IUG', 'ALAZHAR', 'UCAS'])->default('IUG')->nullable();;
+            $table->string('university_num')->unique()->nullable();;
+            $table->string('student_pdf_path')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

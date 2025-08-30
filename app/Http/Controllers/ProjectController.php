@@ -3,42 +3,27 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Auth;
-use Symfony\Component\Process\Process;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
-use App\Models\User;
-use App\Models\Project;
-use App\Models\Repository;
-use App\Models\commits;
-use App\Models\CodeAnalysisReport;
-use App\Models\PlagiarismCheck;
+use Illuminate\Support\Facades\{Auth, Http, Storage, Log, File};
+use App\Models\{User, Project, Repository, CodeAnalysisReport};
 use App\Services\SonarQubeService;
 use App\Services\MossService;
 use ZipArchive;
 use Carbon\Carbon;
 
-
-
 class ProjectController extends Controller
 {
-    
-
     public function index() {
-
-    } // List all projects (for supervisor or admin)
+        // TODO: List all projects (for supervisor or admin)
+    }
 
     public function create(){
         $students = User::where('role', 'student')->get();
         return view('projects.create', compact('students'));
     }
 
-
     public function store(Request $request)
     {
-        set_time_limit(180);
+        set_time_limit(360);
 
         if (!Auth::check() || Auth::user()->role !== 'student') {
             abort(403, 'Only students can create projects.');
@@ -58,134 +43,56 @@ class ProjectController extends Controller
             'student_id' => Auth::id(),
         ]);
 
-        $repoUrl = $request->github_url;
+        $repoUrl  = $request->github_url;
         $repoName = $this->extractRepoName($repoUrl);
-        $parsed = $this->parseGitHubUrl($repoUrl);
+        $parsed   = $this->parseGitHubUrl($repoUrl);
 
         $repoResponse = Http::withHeaders(['User-Agent' => 'Laravel'])
+            ->timeout(60)
             ->get("https://api.github.com/repos/{$parsed['user']}/{$parsed['repo']}");
 
         if (!$repoResponse->ok()) {
-            return redirect()->back()->with('error', '❌ Failed to fetch GitHub repository info.');
+            return back()->with('error', '❌ Failed to fetch GitHub repository info.');
         }
 
-        $repository = Repository::create([
-            'project_id' => $project->id,
-            'github_url' => $repoUrl,
-            'repo_name' => $repoName,
-            'description' => $repoResponse['description'] ?? null,
-            'stars' => $repoResponse['stargazers_count'] ?? 0,
-            'forks' => $repoResponse['forks_count'] ?? 0,
-            'open_issues' => $repoResponse['open_issues_count'] ?? 0,
+        Repository::create([
+            'project_id'   => $project->id,
+            'github_url'   => $repoUrl,
+            'repo_name'    => $repoName,
+            'description'  => $repoResponse['description'] ?? null,
+            'stars'        => $repoResponse['stargazers_count'] ?? 0,
+            'forks'        => $repoResponse['forks_count'] ?? 0,
+            'open_issues'  => $repoResponse['open_issues_count'] ?? 0,
         ]);
 
-        // تحميل ملف ZIP فقط
+        // تنزيل ZIP بشكل موثوق + فك الضغط
         $defaultBranch = $repoResponse['default_branch'] ?? 'main';
-        $zipUrl = "https://github.com/{$parsed['user']}/{$parsed['repo']}/archive/refs/heads/{$defaultBranch}.zip";
-        $zipFileName = "project_{$project->id}.zip";
-        $zipContents = @file_get_contents($zipUrl);
+        $zipFileName   = "project_{$project->id}.zip";
+        $zipPath       = storage_path("app/private/zips/{$zipFileName}");
+        Storage::makeDirectory('private/zips');
 
-        if (!$zipContents) {
-            return redirect()->back()->with('error', '❌ Failed to download the GitHub ZIP archive.');
-        }
+        $this->downloadRepoZip($parsed['user'], $parsed['repo'], $defaultBranch, $zipPath);
+        $this->extractZipToProject($project->id, $zipPath);
 
-        Storage::put("zips/{$zipFileName}", $zipContents);
-
-        $studentIds = $request->students ?? [];
+        // إرفاق الطلاب
+        $studentIds   = $request->students ?? [];
         $studentIds[] = Auth::id();
         $project->students()->attach($studentIds);
 
-        return redirect()->route('dashboard.student')->with('success', '✅ Project created and ZIP downloaded!');
+        return redirect()->route('dashboard.student')
+            ->with('success', '✅ Project created, ZIP downloaded and extracted!');
     }
-
-
-    private function extractRepoName($url){
-        $path = parse_url($url, PHP_URL_PATH);
-        $path = trim($path, '/');
-        $segments = explode('/', $path);
-        return end($segments);
-    }
-
-    private function parseGitHubUrl($url){
-        $path = parse_url($url, PHP_URL_PATH);
-        $segments = explode('/', trim($path, '/'));
-        return count($segments) >= 2 ? ['user' => $segments[0], 'repo' => $segments[1]] : null;
-    }
-
 
     public function acceptedProjects(){
         $supervisor = Auth::user();
 
-        // تحقق من كونه مشرفًا
         if ($supervisor->role !== 'supervisor') {
             abort(403, 'Access denied.');
         }
 
         $projects = Project::where('supervisor_id', $supervisor->id)->get();
-
         return view('supervisor.accepted-projects', compact('projects'));
     }
-
-
-    private function ensureProjectExtracted($projectId)
-    {
-        // 📦 مسار ملف الـ ZIP (تم حفظه في storage/app/private/zips)
-        $zipPath = storage_path("app/private/zips/project_{$projectId}.zip");
-
-        // 🗂️ المسارات المؤقتة والنهائية
-        $tmpExtractPath = storage_path("app/projects/tmp_project_{$projectId}");
-        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
-
-        // ✅ إذا كان المشروع مستخرج مسبقًا، لا حاجة لإعادة الفك
-        if (file_exists($finalExtractPath) && count(glob("$finalExtractPath/*"))) {
-            \Log::info("✅ Project {$projectId} already extracted.");
-            return;
-        }
-
-        // ❌ تحقق من وجود الملف ZIP
-        if (!file_exists($zipPath)) {
-            throw new \Exception("❌ ZIP archive not found for project {$projectId}");
-        }
-
-        // 🗂️ أنشئ مجلد مؤقت إن لم يكن موجودًا
-        if (!file_exists($tmpExtractPath)) {
-            mkdir($tmpExtractPath, 0777, true);
-        }
-
-        // 🔓 فك الضغط
-        $zip = new \ZipArchive;
-        if ($zip->open($zipPath) === true) {
-            $zip->extractTo($tmpExtractPath);
-            $zip->close();
-        } else {
-            throw new \Exception("❌ Failed to extract ZIP for project {$projectId}");
-        }
-
-        // 📂 تحقق من البنية: احصل على المجلد الرئيسي المستخرج
-        $entries = array_values(array_diff(scandir($tmpExtractPath), ['.', '..']));
-        $subfolder = $entries[0] ?? null;
-
-        if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
-            throw new \Exception("❌ Unexpected ZIP structure for project {$projectId}");
-        }
-
-        // 🗑️ احذف أي نسخة سابقة للمجلد النهائي
-        if (file_exists($finalExtractPath)) {
-            \File::deleteDirectory($finalExtractPath);
-        }
-
-        mkdir($finalExtractPath, 0777, true);
-
-        // ✅ انسخ الملفات إلى المجلد النهائي
-        \File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
-
-        // 🧹 احذف المجلد المؤقت
-        \File::deleteDirectory($tmpExtractPath);
-
-        \Log::info("✅ Project {$projectId} extracted to {$finalExtractPath}");
-    }
-
-
 
     public function analyze($id)
     {
@@ -193,16 +100,16 @@ class ProjectController extends Controller
             abort(403, '❌ Access denied. Supervisors only.');
         }
 
-        $service2 = new \App\Services\SonarQubeService();
+        $service2 = new SonarQubeService();
         if (!$service2->isSonarQubeRunning()) {
-            \Log::error('❌ SonarQube is not running. Please start the server at http://localhost:9000');
+            Log::error('❌ SonarQube is not running. Please start the server at http://localhost:9000');
             throw new \Exception('SonarQube is not running. Please start the server at http://localhost:9000');
         }
 
         $project = Project::findOrFail($id);
 
-        // ✅ تأكد أن المشروع مفكوك
-        $this->ensureProjectExtracted($project->id);
+        // ✅ تأكد أن المشروع مفكوك (لو zip غير موجود/تالف لن نعيد التنزيل هنا)
+        $this->ensureExtractedIfNeeded($project->id);
 
         $finalExtractPath = storage_path("app/projects/project_{$project->id}");
 
@@ -226,20 +133,24 @@ class ProjectController extends Controller
         $env = [
             'JAVA_HOME' => 'C:\Program Files\Java\jdk-17',
             'TEMP' => 'C:\Users\HP\AppData\Local\Temp',
-            'TMP' => 'C:\Users\HP\AppData\Local\Temp',
+            'TMP'  => 'C:\Users\HP\AppData\Local\Temp',
             'PATH' => 'C:\Program Files\Java\jdk-17\bin;' . getenv('PATH'),
         ];
-        $process = new \Symfony\Component\Process\Process(['C:\sonar-scanner-4.3.0.2102-windows\bin\sonar-scanner.bat'], $finalExtractPath, $env);
+        $process = new \Symfony\Component\Process\Process(
+            ['C:\sonar-scanner-4.3.0.2102-windows\bin\sonar-scanner.bat'],
+            $finalExtractPath,
+            $env
+        );
         $process->setTimeout(300);
         $process->run();
 
         if (!$process->isSuccessful()) {
-            \Log::error("❌ SonarQube analysis failed: " . $process->getErrorOutput());
+            Log::error("❌ SonarQube analysis failed: " . $process->getErrorOutput());
             return back()->with('error', '❌ SonarQube analysis failed: ' . $process->getErrorOutput());
         }
 
         // 🔹 جلب النتائج من الخدمة
-        $service = new \App\Services\SonarQubeService();
+        $service = new SonarQubeService();
         $results = $service->analyzeProject("project_{$project->id}");
 
         if (!$results) {
@@ -252,105 +163,164 @@ class ProjectController extends Controller
         return redirect()->route('dashboard.supervisor')->with('success', '✅ Code analyzed and saved!');
     }
 
+    // =========================
+    // Helpers
+    // =========================
+
+    private function extractRepoName($url){
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = trim($path, '/');
+        $segments = explode('/', $path);
+        return end($segments);
+    }
+
+    private function parseGitHubUrl($url){
+        $path = parse_url($url, PHP_URL_PATH);
+        $segments = explode('/', trim($path, '/'));
+        return count($segments) >= 2 ? ['user' => $segments[0], 'repo' => $segments[1]] : null;
+    }
+
+    private function looksLikeZip(string $path): bool
+    {
+        if (!file_exists($path) || filesize($path) < 4) return false;
+        $fh = fopen($path, 'rb');
+        $sig = fread($fh, 2);
+        fclose($fh);
+        return $sig === "PK";
+    }
+
+    private function downloadRepoZip(string $owner, string $repo, string $ref, string $destPath): void
+    {
+        $token = env('GITHUB_TOKEN');
+        $headers = [
+            'User-Agent' => 'GitEvalAI',
+            // ملاحظة: zipball يُرجع ZIP حتى بدون هذا الـ Accept
+            'Accept'     => 'application/zip',
+        ];
+        if ($token) {
+            // كلا الشكلين مقبولان لدى GitHub؛ نستخدم Bearer للأحدث
+            $headers['Authorization'] = "Bearer {$token}";
+        }
+
+        // جرّب codeload أولاً (يرجع ZIP مباشر من غير HTML)
+        $candidates = [
+            "https://codeload.github.com/{$owner}/{$repo}/zip/refs/heads/{$ref}",     // 1) أفضل خيار
+            "https://api.github.com/repos/{$owner}/{$repo}/zipball/{$ref}",           // 2) API zipball
+            "https://github.com/{$owner}/{$repo}/archive/refs/heads/{$ref}.zip",      // 3) أرشيف مع ريديركت
+        ];
+
+        $ok = false;
+        foreach ($candidates as $url) {
+            try {
+                $resp = \Illuminate\Support\Facades\Http::withHeaders($headers)
+                    ->timeout(120)
+                    ->withOptions(['allow_redirects' => true, 'stream' => true])
+                    ->get($url);
+
+                $status = $resp->status();
+                $rem    = $resp->header('X-RateLimit-Remaining');
+                $rid    = $resp->header('X-GitHub-Request-Id');
+
+                if (!$resp->ok()) {
+                    Log::warning("ZIP GET failed {$url}: HTTP {$status} (RateRemaining={$rem}, ReqId={$rid})");
+                    continue;
+                }
+
+                // اكتب ستريميًا
+                $stream = fopen($destPath, 'w+b');
+                foreach ($resp->toPsrResponse()->getBody() as $chunk) {
+                    fwrite($stream, $chunk);
+                }
+                fclose($stream);
+                clearstatcache(true, $destPath);
+
+                $size = @filesize($destPath) ?: 0;
+
+                // تحقّق أنه فعلاً ZIP (يبدأ بـ PK)
+                if ($size > 1024 && $this->looksLikeZip($destPath)) {
+                    $ok = true;
+                    Log::info("ZIP downloaded OK from {$url} (size={$size}, RateRemaining={$rem}, ReqId={$rid})");
+                    break;
+                } else {
+                    // اطبع 80 بايت الأولى لنفهم إذا HTML/JSON
+                    $head = @file_get_contents($destPath, false, null, 0, 120);
+                    Log::warning("Bad ZIP content from {$url} (size={$size}). Head=".substr((string)$head, 0, 120));
+                }
+            } catch (\Throwable $e) {
+                Log::warning("ZIP download exception {$url}: ".$e->getMessage());
+            }
+        }
+
+        if (!$ok) {
+            if (file_exists($destPath)) @unlink($destPath);
+            throw new \Exception('❌ Failed to download a valid ZIP (rate limit/redirect?). Add/verify GITHUB_TOKEN in .env');
+        }
+    }
+
+
+    private function extractZipToProject(int $projectId, string $zipPath): void
+    {
+        $tmpExtractPath   = storage_path("app/projects/tmp_project_{$projectId}");
+        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
+
+        if (!(file_exists($finalExtractPath) && count(glob("$finalExtractPath/*")))) {
+            if (!file_exists($tmpExtractPath)) mkdir($tmpExtractPath, 0777, true);
+
+            $zip = new ZipArchive;
+            if ($zip->open($zipPath) === true) {
+                $zip->extractTo($tmpExtractPath);
+                $zip->close();
+            } else {
+                throw new \Exception("❌ Failed to extract ZIP for project {$projectId}");
+            }
+
+            $entries   = array_values(array_diff(scandir($tmpExtractPath), ['.', '..']));
+            $subfolder = $entries[0] ?? null;
+            if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
+                throw new \Exception("❌ Unexpected ZIP structure for project {$projectId}");
+            }
+
+            if (file_exists($finalExtractPath)) File::deleteDirectory($finalExtractPath);
+            mkdir($finalExtractPath, 0777, true);
+
+            File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
+            File::deleteDirectory($tmpExtractPath);
+
+            Log::info("✅ Project {$projectId} extracted to {$finalExtractPath}");
+        }
+    }
+
+    private function ensureExtractedIfNeeded(int $projectId): void
+    {
+        $zipPath          = storage_path("app/private/zips/project_{$projectId}.zip");
+        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
+        if (file_exists($finalExtractPath) && count(glob("$finalExtractPath/*"))) {
+            return;
+        }
+        if (!file_exists($zipPath) || !$this->looksLikeZip($zipPath)) {
+            throw new \Exception("❌ ZIP not found or invalid for project {$projectId}");
+        }
+        $this->extractZipToProject($projectId, $zipPath);
+    }
 
     public function evaluate($id) {
         // TODO: حساب معدل التقييم وعرضه
         return "📝 Evaluation for project ID {$id}";
     }
 
-
-    // //Choos project to compare with
-    // public function plagiarism($id)
-    // {
-    //     if (!Auth::check() || Auth::user()->role !== 'supervisor') {
-    //         abort(403, '❌ Access denied. Supervisors only.');
-    //     }
-
-    //     // المشروع الأساسي
-    //     $project1 = Project::findOrFail($id);
-
-    //     // جميع المشاريع الأخرى باستثناء المشروع المحدد
-    //     $otherProjects = Project::where('id', '!=', $id)->get();
-
-    //     return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
-    // }
-
-    // public function checkPlagiarism(Request $request)
-    // {
-        
-    //     $request->validate([
-    //         'project1_id' => 'required|different:project2_id|exists:projects,id',
-    //         'project2_id' => 'required|exists:projects,id',
-    //     ]);
-
-    //     $project1 = Project::findOrFail($request->project1_id);
-    //     $project2 = Project::findOrFail($request->project2_id);
-
-    //     // تأكد من فك الضغط
-    //     $this->ensureProjectExtracted($project1->id);
-    //     $this->ensureProjectExtracted($project2->id);
-
-    //     $dir1 = storage_path("app/projects/project_{$project1->id}");
-    //     $dir2 = storage_path("app/projects/project_{$project2->id}");
-
-    //     \Log::info("🔍 Starting plagiarism check using MOSS for: $dir1 vs $dir2");
-
-    //     $moss = new \App\Services\MossService();
-    //     $result = $moss->compareProjects($dir1, $dir2);
-
-    //     if (!$result) {
-    //         \Log::error('❌ MOSS comparison failed, no results were generated.');
-    //         return back()->with('error', '❌ Failed to generate plagiarism report. Please try again.');
-    //     }
-
-    //     $report = \App\Models\PlagiarismCheck::create([
-    //         'project1_id' => $project1->id,
-    //         'project2_id' => $project2->id,
-    //         'similarity_percentage' => $result['average_similarity'],
-    //         'matches' => json_encode($result['details']),
-    //         'report_url'            => $result['report_url'] ?? null,
-    //     ]);
-
-    //     \Log::info("✅ Plagiarism report successfully saved. Redirecting to report ID {$report->id}");
-
-    //     return redirect()->route('projects.plagiarism.report', $report->id)
-    //         ->with('success', '✅ Plagiarism report generated successfully.');
-    // }
-
-    // public function viewPlagiarismReport($id)
-    // {
-    //     if (!Auth::check() || Auth::user()->role !== 'supervisor') {
-    //         abort(403, '❌ Access denied. Supervisors only.');
-    //     }
-
-    //     $report = \App\Models\PlagiarismCheck::findOrFail($id);
-
-    //     return view('supervisor.plagiarism-result', [
-    //         'report' => $report,
-    //         'matches' => json_decode($report->matches, true),
-    //     ]);
-    // }
-
-    
-
-
-
-
-
-
-
- // Create project
-
     public function show($id) {
-        
-    } // Get project details
+        // TODO: Get project details
+    }
 
     public function update(Request $request, $id) {
-        
-    }
-    
-    public function destroy($id) {
-        
+        // TODO: Update project
     }
 
+    public function destroy($id) {
+        // TODO: Delete project
+    }
 }
+
+
+
+
