@@ -61,6 +61,44 @@ class DatabaseSeeder extends Seeder
             'verified_at'                   => now(),
         ]);
 
+        //Second Std
+        $stuUser = User::factory()->create([
+            'first_name' => 'Student',
+            'last_name'  => 'Two',
+            'email'      => 'student2@example.com',
+            'role'       => 'student',
+            'password'   => bcrypt('stud123456'),
+        ]);
+
+        Student::create([
+            'user_id'                       => $stuUser->id,
+            'university_name'               => 'IUG',
+            'university_num'                => 'S123356',
+            'enrollment_certificate_path'   => 'dev/dummy.pdf', // ملف وهمي للتجارب
+            'verification_status'           => 'approved',      // مهم: ليعدّي ميدلوير المنع
+            'verified_by'                   => $supUser->id,
+            'verified_at'                   => now(),
+        ]);
+
+        //Third Std
+        $stuUser = User::factory()->create([
+            'first_name' => 'Student',
+            'last_name'  => 'Three',
+            'email'      => 'student3@example.com',
+            'role'       => 'student',
+            'password'   => bcrypt('stud123456'),
+        ]);
+
+        Student::create([
+            'user_id'                       => $stuUser->id,
+            'university_name'               => 'IUG',
+            'university_num'                => 'S654321',
+            'enrollment_certificate_path'   => 'dev/dummy.pdf', // ملف وهمي للتجارب
+            'verification_status'           => 'approved',      // مهم: ليعدّي ميدلوير المنع
+            'verified_by'                   => $supUser->id,
+            'verified_at'                   => now(),
+        ]);
+
         // ... أي seeders إضافية
     }
 }
