@@ -99,4 +99,18 @@ class Student extends Model
             'verified_at' => now(),
         ]);
     }
+
+    public function ownedProject() { return $this->hasOne(\App\Models\Project::class, 'owner_student_id'); }
+    public function memberships()  { return $this->hasMany(\App\Models\ProjectMember::class, 'student_id'); }
+    public function projects()     { return $this->belongsToMany(\App\Models\Project::class, 'project_members'); }
+    public function supervisionRequests() { return $this->hasMany(\App\Models\SupervisorRequest::class, 'student_id'); }
+    public function teamInvitations()     { return $this->hasMany(\App\Models\TeamInvitation::class, 'to_student_id'); }
+
+    public function hasAnyMembership(): bool {
+    return $this->memberships()->exists();
+    }
+    public function canCreateProject(): bool {
+    return !$this->ownedProject()->exists() && !$this->hasAnyMembership();
+    }
+
 }

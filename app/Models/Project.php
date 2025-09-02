@@ -12,36 +12,57 @@ class Project extends Model
     protected $fillable = [
         'title',
         'description',
-        'student_id',
+        'owner_student_id', // مالك المشروع (طالب)
+        'supervisor_id',    // مشرف من جدول supervisors (اختياري)
     ];
-    
-    // الطلاب المرتبطين بالمشروع
-    public function students()
+
+    /** المالك (طالب واحد فقط) */
+    public function owner()
     {
-        return $this->belongsToMany(User::class, 'project_user');
+        return $this->belongsTo(Student::class, 'owner_student_id');
     }
 
-
-    // المشرف المسؤول
+    /** المشرف المرتبط بالمشروع (اختياري) */
     public function supervisor()
     {
-        return $this->belongsTo(User::class, 'supervisor_id');
+        return $this->belongsTo(Supervisor::class, 'supervisor_id');
     }
-    // المستودع
+
+    /** صفوف العضويات (pivot rows) */
+    public function members()
+    {
+        return $this->hasMany(ProjectMember::class);
+    }
+
+    /** جميع الطلاب في الفريق عبر pivot project_members */
+    public function students()
+    {
+        return $this->belongsToMany(Student::class, 'project_members', 'project_id', 'student_id')
+                    ->withPivot('role')
+                    ->withTimestamps();
+    }
+
+    /** المستودع */
     public function repository()
     {
         return $this->hasOne(Repository::class);
     }
-    // التقييم
+
+    /** التقييم */
     public function evaluation()
     {
         return $this->hasOne(Evaluation::class);
     }
 
-    // نتائج كشف السرقة
+    /** نتائج كشف السرقة */
     public function plagiarismChecks()
     {
         return $this->hasMany(PlagiarismCheck::class);
     }
 
+    /** الدعوات */
+    public function invitations()
+    {
+        return $this->hasMany(TeamInvitation::class);
+    }
 }

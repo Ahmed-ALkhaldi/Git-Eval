@@ -9,67 +9,7 @@ use ZipArchive;
 
 class PlagiarismCheckController extends Controller
 {
-    // تأكد من وجود الملفات مفكوكة للمشروع (مع fallback لتنزيل ZIP إن مفقود/تالف)
-    protected function ensureExtracted(int $projectId): void
-    {
-        $zipPath          = storage_path("app/private/zips/project_{$projectId}.zip");
-        $tmpExtractPath   = storage_path("app/projects/tmp_project_{$projectId}");
-        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
-
-        if (file_exists($finalExtractPath) && count(glob("$finalExtractPath/*"))) {
-            Log::info("✅ Project {$projectId} already extracted.");
-            return;
-        }
-
-        // لو الـ ZIP غير موجود/تالف: حاول إعادة تنزيله من قاعدة البيانات
-        if (!file_exists($zipPath) || !$this->looksLikeZip($zipPath)) {
-            $repo = Repository::where('project_id', $projectId)->first();
-            if (!$repo) throw new \Exception("❌ No repository row for project {$projectId}");
-
-            $parsed = $this->parseGitHubUrl($repo->github_url);
-            $owner  = $parsed['user'] ?? null;
-            $name   = $parsed['repo'] ?? null;
-            if (!$owner || !$name) throw new \Exception("❌ Bad GitHub URL for project {$projectId}");
-
-            $defaultBranch = 'main';
-            try {
-                $res = Http::withHeaders(['User-Agent' => 'GitEvalAI'])
-                    ->timeout(60)
-                    ->get("https://api.github.com/repos/{$owner}/{$name}");
-                if ($res->ok()) $defaultBranch = $res['default_branch'] ?? 'main';
-            } catch (\Throwable $e) {
-                Log::warning("Fetch default_branch failed: ".$e->getMessage());
-            }
-
-            Storage::makeDirectory('private/zips');
-            $this->downloadRepoZip($owner, $name, $defaultBranch, $zipPath);
-        }
-
-        if (!file_exists($tmpExtractPath)) mkdir($tmpExtractPath, 0777, true);
-
-        $zip = new ZipArchive;
-        if ($zip->open($zipPath) === true) {
-            $zip->extractTo($tmpExtractPath);
-            $zip->close();
-        } else {
-            throw new \Exception("❌ Failed to extract ZIP for project {$projectId}");
-        }
-
-        $entries   = array_values(array_diff(scandir($tmpExtractPath), ['.', '..']));
-        $subfolder = $entries[0] ?? null;
-        if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
-            throw new \Exception("❌ Unexpected ZIP structure for project {$projectId}");
-        }
-
-        if (file_exists($finalExtractPath)) File::deleteDirectory($finalExtractPath);
-        mkdir($finalExtractPath, 0777, true);
-
-        File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
-        File::deleteDirectory($tmpExtractPath);
-
-        Log::info("✅ Project {$projectId} extracted to {$finalExtractPath}");
-    }
-
+    /** تحليل التشابه: شاشة اختيار المشاريع */
     public function plagiarism($id)
     {
         if (!Auth::check() || Auth::user()->role !== 'supervisor') {
@@ -82,6 +22,7 @@ class PlagiarismCheckController extends Controller
         return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
     }
 
+    /** تنفيذ الفحص وحفظ التقرير */
     public function checkPlagiarism(Request $request)
     {
         $request->validate([
@@ -92,7 +33,7 @@ class PlagiarismCheckController extends Controller
         $project1 = Project::findOrFail($request->project1_id);
         $project2 = Project::findOrFail($request->project2_id);
 
-        // فقط تأكد من الفك — لا تنادِي store()
+        // تأكد من فك الملفات (مع إمكانية إعادة التنزيل إذا ZIP مفقود)
         $this->ensureExtracted($project1->id);
         $this->ensureExtracted($project2->id);
 
@@ -123,6 +64,7 @@ class PlagiarismCheckController extends Controller
             ->with('success', '✅ Plagiarism report generated successfully.');
     }
 
+    /** عرض التقرير */
     public function viewPlagiarismReport($id)
     {
         if (!Auth::check() || Auth::user()->role !== 'supervisor') {
@@ -138,9 +80,84 @@ class PlagiarismCheckController extends Controller
     }
 
     // =========================
-    // Helpers (مكررة هنا لتكون الكلاس مستقل)
+    // Helpers
     // =========================
-    private function parseGitHubUrl($url){
+
+    protected function ensureExtracted(int $projectId): void
+    {
+        $zipPath          = storage_path("app/private/zips/project_{$projectId}.zip");
+        $tmpExtractPath   = storage_path("app/projects/tmp_project_{$projectId}");
+        $finalExtractPath = storage_path("app/projects/project_{$projectId}");
+
+        if (is_dir($finalExtractPath) && count(glob($finalExtractPath . DIRECTORY_SEPARATOR . '*'))) {
+            Log::info("✅ Project {$projectId} already extracted.");
+            return;
+        }
+
+        // لو الـ ZIP غير موجود/تالف: حاول إعادة تنزيله من GitHub
+        if (!file_exists($zipPath) || !$this->looksLikeZip($zipPath)) {
+            $repo = Repository::where('project_id', $projectId)->first();
+            if (!$repo) throw new \Exception("❌ No repository row for project {$projectId}");
+
+            $parsed = $this->parseGitHubUrl($repo->github_url);
+            $owner  = $parsed['user'] ?? null;
+            $name   = $parsed['repo'] ?? null;
+            if (!$owner || !$name) throw new \Exception("❌ Bad GitHub URL for project {$projectId}");
+
+            $defaultBranch = 'main';
+            try {
+                $res = Http::withHeaders(['User-Agent' => 'GitEvalAI'])
+                    ->timeout(60)
+                    ->get("https://api.github.com/repos/{$owner}/{$name}");
+                if ($res->ok()) $defaultBranch = $res['default_branch'] ?? 'main';
+            } catch (\Throwable $e) {
+                Log::warning("Fetch default_branch failed: ".$e->getMessage());
+            }
+
+            Storage::makeDirectory('private/zips');
+            $this->downloadRepoZip($owner, $name, $defaultBranch, $zipPath);
+        }
+
+        if (!is_dir($tmpExtractPath)) mkdir($tmpExtractPath, 0777, true);
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipPath) !== true) {
+            throw new \Exception("❌ Failed to open ZIP for project {$projectId}");
+        }
+
+        try {
+            if (!$zip->extractTo($tmpExtractPath)) {
+                throw new \Exception("❌ Failed to extract ZIP for project {$projectId}");
+            }
+        } finally {
+            $zip->close();
+        }
+
+        // اختيار جذر صحيح (تجاهل __MACOSX والمجلدات المخفية)
+        $entries = array_values(array_filter(scandir($tmpExtractPath), function ($e) use ($tmpExtractPath) {
+            if ($e === '.' || $e === '..') return false;
+            if (strpos($e, '__MACOSX') === 0) return false;
+            if (strpos($e, '.') === 0) return false;
+            return is_dir($tmpExtractPath . DIRECTORY_SEPARATOR . $e);
+        }));
+
+        $subfolder = $entries[0] ?? null;
+        if (!$subfolder || !is_dir("{$tmpExtractPath}/{$subfolder}")) {
+            File::deleteDirectory($tmpExtractPath);
+            throw new \Exception("❌ Unexpected ZIP structure for project {$projectId}");
+        }
+
+        if (is_dir($finalExtractPath)) File::deleteDirectory($finalExtractPath);
+        mkdir($finalExtractPath, 0777, true);
+
+        File::copyDirectory("{$tmpExtractPath}/{$subfolder}", $finalExtractPath);
+        File::deleteDirectory($tmpExtractPath);
+
+        Log::info("✅ Project {$projectId} extracted to {$finalExtractPath}");
+    }
+
+    private function parseGitHubUrl($url): ?array
+    {
         $path = parse_url($url, PHP_URL_PATH);
         $segments = explode('/', trim($path, '/'));
         return count($segments) >= 2 ? ['user' => $segments[0], 'repo' => $segments[1]] : null;
@@ -162,10 +179,11 @@ class PlagiarismCheckController extends Controller
             'Accept'     => 'application/zip',
         ];
         if ($token = env('GITHUB_TOKEN')) {
-            $headers['Authorization'] = "token {$token}";
+            $headers['Authorization'] = "Bearer {$token}";
         }
 
         $candidates = [
+            "https://codeload.github.com/{$owner}/{$repo}/zip/refs/heads/{$ref}",
             "https://api.github.com/repos/{$owner}/{$repo}/zipball/{$ref}",
             "https://github.com/{$owner}/{$repo}/archive/refs/heads/{$ref}.zip",
         ];
@@ -179,7 +197,7 @@ class PlagiarismCheckController extends Controller
                     ->get($url);
 
                 if (!$resp->ok()) {
-                    Log::warning("ZIP download failed {$url}: HTTP {$resp->status()}");
+                    Log::warning("ZIP download failed {$url}: HTTP ".$resp->status());
                     continue;
                 }
 
@@ -195,7 +213,8 @@ class PlagiarismCheckController extends Controller
                     $ok = true;
                     break;
                 } else {
-                    Log::warning("Bad ZIP content from {$url} (size={$size}).");
+                    $head = @file_get_contents($destPath, false, null, 0, 120);
+                    Log::warning("Bad ZIP content from {$url} (size={$size}). Head=".substr((string)$head, 0, 120));
                 }
             } catch (\Throwable $e) {
                 Log::warning("ZIP download exception {$url}: ".$e->getMessage());
