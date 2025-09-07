@@ -1,64 +1,76 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;        // ✅ مهم لـ Auth
-use Illuminate\Http\Request;               // ✅ لتمرير $request للّوج آوت
-
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\PlagiarismCheckController;
-use App\Http\Controllers\SupervisorRequestController;
 
-Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
+/*
+|--------------------------------------------------------------------------
+| الصفحة الرئيسية (welcome)
+|--------------------------------------------------------------------------
+*/
+Route::view('/', 'welcome')->name('welcome');
 
-Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register');
-Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
+/*
+|--------------------------------------------------------------------------
+| الضيوف (Guest): تسجيل الدخول/التسجيل
+|--------------------------------------------------------------------------
+*/
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 
-Route::get('/student/dashboard', function () {
-    return view('student.studentDashboard');
-})->name('dashboard.student');
-
-Route::get('/supervisor/dashboard', function () {
-    return view('supervisor.supervisorDashboard');
-})->name('dashboard.supervisor');
-
-// ✅ Logout (جلسات الويب) + حماية auth + CSRF (POST)
-Route::post('/logout', function (Request $request) {
-    Auth::guard('web')->logout();
-    $request->session()->invalidate();
-    $request->session()->regenerateToken();
-    return redirect()->route('login');
-})->middleware('auth')->name('logout');
-
-// إنشاء مشروع
-Route::middleware(['auth',\App\Http\Middleware\BlockUnverifiedStudents::class])->group(function () {
-    Route::get('/student/dashboard', fn() => view('student.studentDashboard'))->name('dashboard.student');
-    Route::get('/projects/create', [ProjectController::class, 'create'])->name('projects.create');
-    Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
+    Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register');
+    Route::post('/register', [AuthController::class, 'register'])->name('register.post');
 });
 
-Route::middleware(['auth'])->group(function () {
-    // الطالب → عرض المشرفين وإرسال طلب إشراف
-    Route::get('/supervisors', [SupervisorRequestController::class, 'indexForStudent'])->name('supervisors.list');
-    Route::post('/supervisors/request/{id}', [SupervisorRequestController::class, 'sendRequest'])->name('supervisors.request');
+/*
+|--------------------------------------------------------------------------
+| المصدقون (Auth): لوحات/طلبات/مشاريع
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth')->group(function () {
 
-    // المشرف → استعراض/الرد على طلبات الإشراف
-    Route::get('/supervisor/requests', [SupervisorRequestController::class, 'indexForSupervisor'])->name('supervisor.requests');
-    Route::post('/supervisor/requests/{id}/{action}', [SupervisorRequestController::class, 'respond'])->name('supervisor.request.respond');
+    // تسجيل الخروج (POST فقط)
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-    // مشاريع مقبولة لدى المشرف
-    Route::get('/supervisor/accepted-projects', [ProjectController::class, 'acceptedProjects'])->name('supervisor.accepted-projects');
+    /*
+    |-------------------- الطالب --------------------
+    */
+    // اسم الراوت المطلوب من AuthController: student.dashboard
+    Route::view('/student/dashboard', 'student.studentDashboard')->name('student.dashboard');
 
-    // تحليل السونار
-    Route::post('/projects/{id}/analyze', [ProjectController::class, 'analyze'])->name('projects.analyze');
+    // إنشاء مشروع (نفس أسماء المجلدات الموجودة)
+    Route::view('/projects/create', 'projects.create')->name('projects.create');
 
-    // ✅ تصحيح: ربط مسار فحص السرقة بالكونترولر الصحيح
-    Route::get('/projects/{id}/plagiarism', [PlagiarismCheckController::class, 'plagiarism'])->name('projects.plagiarism');
+    /*
+    |-------------------- المشرف --------------------
+    */
+    // لوحة المشرف العامة
+    Route::view('/supervisor/dashboard', 'supervisor.supervisorDashboard')->name('supervisor.dashboard');
 
-    Route::get('/supervisor/plagiarism-check/{project1}', [PlagiarismCheckController::class, 'plagiarism'])->name('projects.plagiarism.form');
-    Route::post('/supervisor/plagiarism-check', [PlagiarismCheckController::class, 'checkPlagiarism'])->name('projects.plagiarism.check');
-    Route::get('/supervisor/plagiarism-report/{id}', [PlagiarismCheckController::class, 'viewPlagiarismReport'])->name('projects.plagiarism.report');
+    // طلبات الإشراف المعلّقة — ربطناه باسم route الذي تستخدمه في التوجيه: supervisor.requests
+    Route::view('/supervisor/requests', 'requests.pending')->name('supervisor.requests');
 
-    Route::get('/projects/{id}/evaluate', [ProjectController::class, 'evaluate'])->name('projects.evaluate');
+    // قائمة المشرفين (واجهة موجودة باسم requests/supervisors.blade.php)
+    Route::view('/supervisors', 'requests.supervisors')->name('supervisors.list');
+
+    // مشاريع المشرف
+    Route::view('/supervisor/projects', 'supervisor.projects.index')->name('supervisor.projects.index');
+
+    // المشاريع المقبولة لدى المشرف
+    Route::view('/supervisor/accepted-projects', 'supervisor.accepted-projects')->name('supervisor.accepted-projects');
+
+    // واجهات فحص الانتحال (Plagiarism) الموجودة في المجلد
+    Route::view('/supervisor/plagiarism/select', 'supervisor.plagiarism_select')->name('supervisor.plagiarism.form');
+    Route::view('/supervisor/plagiarism/result', 'supervisor.plagiarism-result')->name('supervisor.plagiarism.result');
+
+    /*
+    |-------------------- الأدمن --------------------
+    */
+    // لا يوجد admin/panel.blade.php في الأرشيف الحالي
+    // إن كان AuthController يوجّه إلى admin.panel، إمّا:
+    //   1) تضيف هذا العرض لاحقًا resources/views/admin/panel.blade.php
+    //   2) أو تغيّر التوجيه في AuthController لدور الأدمن مؤقتًا إلى welcome أو صفحة أخرى موجودة
+    // مؤقتًا نربطه بصفحة welcome حتى لا يحدث خطأ:
+    Route::get('/admin/panel', fn() => view('welcome'))->name('admin.panel');
 });
