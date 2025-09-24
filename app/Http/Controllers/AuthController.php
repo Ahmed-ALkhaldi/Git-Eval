@@ -23,7 +23,7 @@ class AuthController extends Controller
     {
         return match ($user->role) {
             'student'    => redirect()->route('student.dashboard'),
-            'supervisor' => redirect()->route('supervisor.requests'),
+            'supervisor' => redirect()->route('supervisor.dashboard'),
             'admin'      => redirect()->route('admin.panel'),
             default      => redirect()->route('welcome'), // نضمن وجوده بالأسفل
         };

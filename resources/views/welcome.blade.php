@@ -65,7 +65,7 @@
                 <a class="btn btn-light px-4" href="{{ route('student.dashboard') }}">Student Dashboard</a>
               @elseif ($role === 'supervisor')
                 {{-- عدّل إلى route('supervisor.dashboard') إذا كان هذا اسم الراوت عندك --}}
-                <a class="btn btn-light px-4" href="{{ route('supervisor.requests') }}">Supervisor Dashboard</a>
+                <a class="btn btn-light px-4" href="{{ route('supervisor.dashboard') }}">Supervisor Dashboard</a>
               @elseif ($role === 'admin')
                 <a class="btn btn-light px-4" href="{{ route('admin.panel') }}">Admin Panel</a>
               @else

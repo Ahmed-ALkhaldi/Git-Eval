@@ -427,5 +427,114 @@ class ProjectController extends Controller
     public function evaluate($id) { return "📝 Evaluation for project ID {$id}"; }
     public function show($id) { /* ... */ }
     public function update(Request $request, $id) { /* ... */ }
-    public function destroy($id) { /* ... */ }
+
+
+    /**
+     * إرجاع تقرير المشروع (عرض صفحة التقرير)
+     */
+    public function report(Project $project)
+    {
+        $student = $this->currentStudent();
+
+        // السماح لأي "مالك" للمشروع أو أي "عضو" ضمن الفريق بالوصول للتقرير
+        abort_unless($this->canAccessProject($project, $student), 403);
+
+        // حمّل العلاقات اللازمة للتقرير
+        $project->load([
+            'owner.user',              // مالك المشروع (الطالب) + بيانات user
+            'supervisor.user',         // المشرف + user
+            'students.user',           // كل الطلاب ضمن الفريق + user
+            'repository',              // المستودع
+            'evaluation',              // التقييم
+            'plagiarismChecks',        // نتائج كشف الانتحال
+            'invitations',             // الدعوات
+        ]);
+
+        return view('projects.report', compact('project'));
+    }
+
+    /**
+     * حذف مشروع
+     */
+    public function destroy(Project $project)
+    {
+        $student = $this->currentStudent();
+
+        // الحذف مسموح فقط لمالك المشروع الحقيقي
+        $isOwner = ($project->owner_student_id === $student->id);
+
+        // إن كنت تستخدم الـpivot وتسمّي "owner" كدور، تقدّر تسمح له أيضاً:
+        $isPivotOwner = $project->students()
+            ->where('students.id', $student->id)
+            ->wherePivot('role', 'owner')
+            ->exists();
+
+        abort_unless($isOwner || $isPivotOwner, 403);
+
+        // تنفيذ الحذف (تأكد من onDelete('cascade') في العلاقات إذا أردت حذف التوابع تلقائياً)
+        $project->delete();
+
+        return redirect()
+            ->route('student.dashboard')
+            ->with('status', 'Project deleted successfully.');
+    }
+
+    /* ===================== Helpers ===================== */
+
+    /**
+     * جلب الطالب المرتبط بالمستخدم الحالي (أضمن)
+     */
+    protected function currentStudent(): Student
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        // لو ما في علاقة student للمستخدم الحالي نمنع الوصول
+        if (!$user || !$user->relationLoaded('student')) {
+            $user?->load('student');
+        }
+        abort_unless(optional($user)->student, 403);
+        return $user->student;
+    }
+
+    /**
+     * التحقق من صلاحية وصول الطالب للمشروع (مالك أو عضو)
+     */
+    protected function canAccessProject(Project $project, Student $student): bool
+    {
+        if ($project->owner_student_id === $student->id) {
+            return true;
+        }
+
+        return $project->students()
+            ->where('students.id', $student->id)
+            ->exists();
+    }
+    public function details(\App\Models\Project $project)
+    {
+        $student = \App\Models\Student::where('user_id', \Illuminate\Support\Facades\Auth::id())->firstOrFail();
+
+        $isOwner  = $project->owner_student_id === $student->id;
+        $isMember = $project->students()->where('students.id', $student->id)->exists();
+        abort_unless($isOwner || $isMember, 403);
+
+        $project->load(['supervisor.user', 'students.user']);
+
+        $supervisorName = $project->supervisor->user->name
+            ?? trim(($project->supervisor->first_name ?? '').' '.($project->supervisor->last_name ?? ''));
+
+        return response()->json([
+            'id'          => $project->id,
+            'title'       => $project->title,
+            'description' => $project->description,
+            'supervisor'  => $supervisorName ?: null,
+            'team'        => $project->students->map(function ($st) {
+                return [
+                    'id'   => $st->id,
+                    'name' => $st->user->name ?? trim(($st->first_name ?? '').' '.($st->last_name ?? '')),
+                ];
+            })->values(),
+        ]);
+    }
+
+
 }
