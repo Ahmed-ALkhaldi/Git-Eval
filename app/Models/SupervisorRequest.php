@@ -9,16 +9,29 @@ class SupervisorRequest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['student_id', 'supervisor_id', 'status'];
+    protected $table = 'supervision_requests';
+
+    protected $fillable = [
+        'student_id',
+        'supervisor_id',
+        'status',       // pending | accepted | rejected
+        'message',
+        'is_active',
+        'responded_at',
+    ];
+
+    protected $casts = [
+        'is_active'    => 'boolean',
+        'responded_at' => 'datetime',
+    ];
 
     public function student()
     {
-        return $this->belongsTo(User::class, 'student_id');
+        return $this->belongsTo(Student::class, 'student_id');
     }
 
     public function supervisor()
     {
-        return $this->belongsTo(User::class, 'supervisor_id');
+        return $this->belongsTo(Supervisor::class, 'supervisor_id');
     }
 }
-

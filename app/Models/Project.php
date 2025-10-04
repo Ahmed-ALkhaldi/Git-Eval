@@ -10,54 +10,56 @@ class Project extends Model
     use HasFactory;
 
     protected $fillable = [
-        'title',
-        'description',
-        'owner_student_id', // مالك المشروع (طالب)
-        'supervisor_id',    // مشرف من جدول supervisors (اختياري)
+        "title",
+        "description",
+        "supervisor_note",
+        "sonar_project_key",
+        "owner_student_id", // مالك المشروع
+        "supervisor_id",    // المشرف (اختياري لحين القبول)
     ];
 
-    /** المالك (طالب واحد فقط) */
+    /** مالك المشروع (طالب) */
     public function owner()
     {
-        return $this->belongsTo(Student::class, 'owner_student_id');
+        return $this->belongsTo(Student::class, "owner_student_id");
     }
 
-    /** المشرف المرتبط بالمشروع (اختياري) */
-    public function supervisor()
-    {
-        return $this->belongsTo(Supervisor::class, 'supervisor_id');
-    }
-
-    /** صفوف العضويات (pivot rows) */
-    public function members()
-    {
-        return $this->hasMany(ProjectMember::class);
-    }
-
-    /** جميع الطلاب في الفريق عبر pivot project_members */
+    /** أعضاء الفريق عبر pivot project_members (مع role إن لزم) */
     public function students()
     {
-        return $this->belongsToMany(Student::class, 'project_members', 'project_id', 'student_id')
-                    ->withPivot('role')
+        return $this->belongsToMany(Student::class, "project_members")
+                    ->withPivot(["role"])
                     ->withTimestamps();
     }
 
-    /** المستودع */
+    /** المشرف */
+    public function supervisor()
+    {
+        return $this->belongsTo(Supervisor::class);
+    }
+
+    /** الريبو المرتبط بالمشروع (نستخدمه لعرض رابط GitHub) */
     public function repository()
     {
         return $this->hasOne(Repository::class);
     }
 
-    /** التقييم */
-    public function evaluation()
+    /** تقارير تحليل السونار (الموديل عندك CodeAnalysisReport) */
+    public function codeAnalysisReport()
     {
-        return $this->hasOne(Evaluation::class);
+        return $this->hasOne(CodeAnalysisReport::class);
     }
 
-    /** نتائج كشف السرقة */
+    /** نتائج كشف الانتحال: كـ project1 */
     public function plagiarismChecks()
     {
-        return $this->hasMany(PlagiarismCheck::class);
+        return $this->hasMany(PlagiarismCheck::class, "project1_id");
+    }
+
+    /** نتائج كشف الانتحال: كـ project2 */
+    public function plagiarismChecksAsProject2()
+    {
+        return $this->hasMany(PlagiarismCheck::class, "project2_id");
     }
 
     /** الدعوات */
@@ -65,4 +67,32 @@ class Project extends Model
     {
         return $this->hasMany(TeamInvitation::class);
     }
+
+    /** تقييم جماعي للمشروع (Evaluation) */
+    public function evaluation()
+    {
+        return $this->hasOne(Evaluation::class);
+    }
+
+    public function evaluations()        { return $this->hasMany(\App\Models\Evaluation::class); }
+    public function studentEvaluations() { return $this->hasMany(\App\Models\StudentEvaluation::class); }
+
+    /** تقارير تحليل الكود الجديدة */
+    public function codeAnalysisReports()
+    {
+        return $this->hasMany(\App\Models\CodeAnalysisReport::class);
+    }
+
+    /** آخر تقرير تحليل كود */
+    public function latestCodeAnalysisReport()
+    {
+        return $this->hasOne(\App\Models\CodeAnalysisReport::class)->latest('analysis_at');
+    }
+
+    /** قضايا تحليل الكود */
+    public function codeAnalysisIssues()
+    {
+        return $this->hasMany(\App\Models\CodeAnalysisResult::class);
+    }
+
 }

@@ -18,12 +18,11 @@ return new class extends Migration {
                 ->constrained('supervisors')
                 ->cascadeOnDelete();
 
-            $table->enum('status', ['pending','accepted','rejected'])->default('pending');
-
-            // نستخدم is_active لضمان طلب واحد نشط (بديل عن الفهارس الجزئية في MySQL)
+            $table->enum('status', ['pending', 'accepted', 'rejected'])->default('pending');
             $table->boolean('is_active')->default(true);
+            $table->text('message')->nullable();
+            $table->timestamp('responded_at')->nullable();
 
-            $table->timestamp('responded_at')->nullable(); // عند القبول/الرفض
             $table->timestamps();
 
             $table->index(['student_id', 'status']);

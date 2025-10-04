@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class AdminStudentController extends Controller
@@ -51,7 +52,9 @@ class AdminStudentController extends Controller
             'user_id'          => $user->id,
             'university_name'  => $data['university_name'],
             'university_num'   => $data['university_num'],
-            'verification_status' => 'pending',
+            'verification_status' => 'approved', // تم تغييرها من 'pending' إلى 'approved'
+            'verified_by'      => Auth::id(), // المدير الذي أضاف الطالب
+            'verified_at'      => now(), // وقت الإضافة
         ]);
 
         return response()->json(['id'=>$student->id], 201);

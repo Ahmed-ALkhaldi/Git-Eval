@@ -6,45 +6,120 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   {{-- CSRF for AJAX --}}
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Poppins:wght@400;500;600;700&display=swap">
 
   <style>
     :root {
-      --success: #28a745;
-      --danger: #dc3545;
-      --text: #343a40;
-      --primary: #007bff;
+      --primary: #2196f3;
+      --primary-700: #1976d2;
+      --accent: #00e5ff;
+      --text: #0d1b2a;
+      --muted: #5c6b73;
+      --danger: #f44336;
+      --warning: #ff9800;
+      --success: #4caf50;
+      --card-bg: rgba(255, 255, 255, 0.25);
+      --radius: 16px;
+      --shadow: 0 6px 24px rgba(31, 38, 135, 0.2);
     }
 
     body {
-      font-family: Arial, sans-serif;
-      background: #d8f0ff;
+      font-family: 'Cairo', 'Poppins', sans-serif;
+      background: linear-gradient(-45deg, #e3f2fd, #bbdefb, #90caf9, #e1f5fe);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
       text-align: center;
       padding: 20px;
       margin: 0;
+      min-height: 100vh;
     }
 
-    h2 { margin-bottom: 10px; }
-
-    /* بطاقة اللوج اوت */
-    .logout-card {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      width: 200px;
-      margin: 0 auto 30px auto;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
 
-    .logout-card button {
-      background: var(--danger);
+    h2 { 
+      margin-bottom: 20px; 
+      color: var(--text);
+      text-align: center;
+      font-weight: 700;
+    }
+
+    /* Navigation Bar - Matching Supervisor Colors */
+    .navbar {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      padding: 15px 30px;
+      margin-bottom: 30px;
+      border-radius: 18px;
+      box-shadow: 0 6px 24px rgba(31, 38, 135, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #0d1b2a;
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .navbar-brand i {
+      font-size: 22px;
+      padding: 8px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2196f3, #00e5ff);
       color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
     }
-    .logout-card button:hover { opacity: 0.9; }
+
+    .navbar-actions {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .btn-home {
+      background: rgba(255, 255, 255, 0.55);
+      color: #1976d2;
+      padding: 8px 16px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      border: 1px solid rgba(33, 150, 243, 0.25);
+    }
+
+    .btn-home:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(33, 150, 243, 0.15);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .btn-logout {
+      background: linear-gradient(90deg, #f44336, #ff7b6e);
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 14px rgba(244, 67, 54, 0.25);
+    }
+
+    .btn-logout:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(244, 67, 54, 0.25);
+    }
 
     /* الحاوية الرئيسية */
     .dashboard-container {
@@ -55,38 +130,59 @@
     }
 
     .section {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
+      background: var(--card-bg);
+      backdrop-filter: blur(22px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
       width: 45%;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       display: flex;
       flex-direction: column;
       min-height: 350px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    
+    .section:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 30px rgba(31, 38, 135, 0.18);
     }
 
     .section h3 {
       margin-top: 0;
       margin-bottom: 15px;
-      color: #333;
+      color: var(--text);
       text-align: center;
+      font-weight: 700;
     }
 
-    /* الأزرار */
+    /* الأزرار - Matching Supervisor Style */
     .btn {
-      color: white;
-      padding: 8px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 12px;
       border: none;
-      border-radius: 5px;
       cursor: pointer;
+      font-weight: 700;
       font-size: 13px;
-      transition: 0.2s;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s;
+      color: white;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      box-shadow: 0 6px 14px rgba(33, 150, 243, 0.25);
     }
-    .btn-success { background: var(--success); }
-    .btn-danger { background: var(--danger); }
-    .btn-dark { background: var(--text); }
-    .btn-primary { background: var(--primary); }
-    .btn:hover { opacity: 0.85; }
+    .btn:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 10px 20px rgba(33, 150, 243, 0.25); 
+    }
+    .btn:active { transform: translateY(0); }
+    .btn i { font-size: 14px; }
+    
+    .btn-success { background: linear-gradient(90deg, var(--success), #6fdc8c); }
+    .btn-danger { background: linear-gradient(90deg, var(--danger), #ff7b6e); }
+    .btn-dark { background: linear-gradient(90deg, var(--text), #5c6b73); }
+    .btn-primary { background: linear-gradient(90deg, var(--primary), var(--accent)); }
 
     .button-group {
       display: flex;
@@ -95,23 +191,44 @@
       margin-bottom: 15px;
     }
 
-    /* الجدول */
+    /* الجدول - Matching Supervisor Style */
     table {
       width: 100%;
       border-collapse: collapse;
+      border-spacing: 0;
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(31, 38, 135, 0.12);
       margin-top: auto;
       flex-grow: 1;
       display: none;
     }
-    table, th, td { border: 1px solid #ccc; }
-    th, td { padding: 10px; text-align: center; }
-    th { background: #f5f5f5; }
+    
+    table thead th {
+      font-weight: 700;
+      font-size: 14px;
+      text-align: left;
+      padding: 12px;
+      background: rgba(33, 150, 243, 0.1);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    
+    table tbody td {
+      padding: 12px;
+      font-size: 14px;
+      border-bottom: 1px dashed rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.7);
+    }
+    
+    table tbody tr:hover td {
+      background: rgba(255, 255, 255, 0.9);
+    }
 
     tbody:empty::after {
       content: "No data available";
       display: block;
       padding: 40px;
-      color: #777;
+      color: var(--muted);
     }
 
     /* Popup */
@@ -158,21 +275,46 @@
     /* Responsive */
     @media (max-width: 900px) {
       .section { width: 100%; }
+      
+      .navbar {
+        flex-direction: column;
+        gap: 15px;
+        padding: 20px;
+      }
+      
+      .navbar-brand {
+        font-size: 1.1rem;
+      }
+      
+      .navbar-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
     }
   </style>
 </head>
 <body>
 
-  <h2>Admin Dashboard</h2>
-  <p>Manage Students and Supervisors</p>
-
-  <!-- بطاقة اللوج اوت (خروج حقيقي) -->
-  <div class="logout-card">
-    <form id="logoutForm" action="{{ route('logout') }}" method="POST">
-      @csrf
-      <button type="submit">Logout</button>
-    </form>
+  <!-- Navigation Bar -->
+  <div class="navbar">
+    <div class="navbar-brand">
+      <i class="fa-solid fa-shield-halved"></i>
+      <span>Admin Dashboard</span>
+    </div>
+    <div class="navbar-actions">
+      <a href="{{ route('welcome') }}" class="btn btn-home">
+        <i class="fa-solid fa-home"></i> Home
+      </a>
+      <form method="POST" action="{{ route('logout') }}" style="display: inline;">
+        @csrf
+        <button type="submit" class="btn btn-logout">
+          <i class="fa-solid fa-sign-out-alt"></i> Logout
+        </button>
+      </form>
+    </div>
   </div>
+
+  <h2>Manage Students and Supervisors</h2>
 
   <!-- الحاوية الرئيسية -->
   <div class="dashboard-container">

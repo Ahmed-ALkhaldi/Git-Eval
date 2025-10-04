@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
+use App\Models\PlagiarismCheck;
 
 class MossService
 {
@@ -11,7 +13,7 @@ class MossService
     private function mossPortOpen(int $timeout = 3): bool {
         $fp = @fsockopen('moss.stanford.edu', 7690, $errno, $errstr, $timeout);
         if ($fp) { fclose($fp); return true; }
-        \Log::warning("⛔ Port 7690 closed in PHP context: errno={$errno} err={$errstr}");
+        Log::warning("⛔ Port 7690 closed in PHP context: errno={$errno} err={$errstr}");
         return false;
     }
 
@@ -20,16 +22,19 @@ class MossService
      * ✅ مقارنة مشروعين باستخدام سكربت batch الحالي
      * - يقرأ الرابط من resources/moss/moss_result.txt
      * - يعمل من داخل resources/moss
+     * - يحفظ النتائج في قاعدة البيانات
      */
-    public function compareProjects(string $project1Dir, string $project2Dir): ?array
+    public function compareProjects(string $project1Dir, string $project2Dir, ?int $project1Id = null, ?int $project2Id = null): ?array
     {
+        $t0 = hrtime(true); // بداية تتبع الوقت
+        
         $workdir    = base_path('resources/moss');
         $batch      = $workdir . DIRECTORY_SEPARATOR . 'compare_moss.bat';
         $resultTxt  = $workdir . DIRECTORY_SEPARATOR . 'moss_result.txt';
         $outLog     = $workdir . DIRECTORY_SEPARATOR . 'moss_output.log';
 
         if (!file_exists($batch)) {
-            \Log::error("❌ Batch script not found at $batch");
+            Log::error("❌ Batch script not found at $batch");
             return null;
         }
 
@@ -44,7 +49,7 @@ class MossService
         call "{$batch}" "{$project1Dir}" "{$project2Dir}"
         BAT;
         if (file_put_contents($runner, $cmdContent) === false) {
-            \Log::error("❌ Failed to write runner file: $runner");
+            Log::error("❌ Failed to write runner file: $runner");
             return null;
         }
 
@@ -65,9 +70,9 @@ class MossService
         $create = new \Symfony\Component\Process\Process($createArgs, $workdir);
         $create->setTimeout(60);
         $create->run();
-        \Log::info('🛠 schtasks /create output: '.$create->getOutput());
+        Log::info('🛠 schtasks /create output: '.$create->getOutput());
         if (!$create->isSuccessful()) {
-            \Log::error('❌ schtasks /create error: '.$create->getErrorOutput());
+            Log::error('❌ schtasks /create error: '.$create->getErrorOutput());
             @unlink($runner);
             return null;
         }
@@ -77,9 +82,9 @@ class MossService
             $run = new \Symfony\Component\Process\Process(['schtasks','/run','/tn',$taskName], $workdir);
             $run->setTimeout(30);
             $run->run();
-            \Log::info('▶️ schtasks /run output: '.$run->getOutput());
+            Log::info('▶️ schtasks /run output: '.$run->getOutput());
             if (!$run->isSuccessful()) {
-                \Log::error('❌ schtasks /run error: '.$run->getErrorOutput());
+                Log::error('❌ schtasks /run error: '.$run->getErrorOutput());
                 return null;
             }
 
@@ -102,48 +107,103 @@ class MossService
             }
 
             if (!file_exists($resultTxt)) {
-                \Log::error('❌ No result file produced (moss_result.txt) by scheduled task.');
+                Log::error('❌ No result file produced (moss_result.txt) by scheduled task.');
                 if (file_exists($outLog)) {
-                    \Log::warning("📝 moss_output.log (tail): " . mb_substr(@file_get_contents($outLog), -2000));
+                    Log::warning("📝 moss_output.log (tail): " . mb_substr(@file_get_contents($outLog), -2000));
                 }
                 return null;
             }
 
             $resultText = trim((string)@file_get_contents($resultTxt));
-            \Log::info("🔗 result.txt: " . mb_substr($resultText, 0, 500));
+            Log::info("🔗 result.txt: " . mb_substr($resultText, 0, 500));
 
             if (!preg_match('/https?:\/\/\S+/', $resultText, $m)) {
-                \Log::error("❌ No URL found in moss_result.txt.");
+                Log::error("❌ No URL found in moss_result.txt.");
                 if (file_exists($outLog)) {
-                    \Log::warning("📝 moss_output.log (tail): " . mb_substr(@file_get_contents($outLog), -2000));
+                    Log::warning("📝 moss_output.log (tail): " . mb_substr(@file_get_contents($outLog), -2000));
                 }
                 return null;
             }
 
             $reportUrl = $m[0];
-            \Log::info("📄 Report URL: {$reportUrl}");
+            Log::info("📄 Report URL: {$reportUrl}");
 
             $html = @file_get_contents($reportUrl);
             if (!$html) {
-                \Log::error("❌ Failed to fetch MOSS report HTML from {$reportUrl}");
+                Log::error("❌ Failed to fetch MOSS report HTML from {$reportUrl}");
                 return null;
             }
 
-            return $this->parseMossReport($html);
+            // تحليل النتائج
+            $parsed = $this->parseMossReport($html);
+            $resultArray = [
+                'average_similarity' => round($parsed['average_similarity'] ?? 0, 2),
+                'details'            => $parsed['details'] ?? [],
+                'report_url'         => $reportUrl,
+            ];
+
+            // حفظ النتائج في قاعدة البيانات إذا توفرت معرفات المشاريع
+            if ($project1Id && $project2Id) {
+                try {
+                    DB::transaction(function () use ($resultArray, $reportUrl, $html, $project1Id, $project2Id, $t0) {
+                        PlagiarismCheck::create([
+                            'project1_id'          => $project1Id,
+                            'project2_id'          => $project2Id,
+                            'similarity_percentage' => $resultArray['average_similarity'],
+                            'matches'              => json_encode($resultArray['details']),
+                            'matches_count'        => count($resultArray['details']),
+                            'report_url'           => $reportUrl,
+                            'moss_task_id'         => 'moss_' . date('Ymd_His') . '_' . mt_rand(1000, 9999),
+                            'compared_at'          => now(),
+                            'duration_ms'          => (int) ((hrtime(true) - $t0) / 1e6),
+                            'report_html_gz'       => base64_encode(gzencode($html, 9)), // تخزين HTML مضغوط
+                        ]);
+                    });
+                    
+                    Log::info('✅ Plagiarism check results saved to database', [
+                        'project1_id' => $project1Id,
+                        'project2_id' => $project2Id,
+                        'similarity'  => $resultArray['average_similarity'],
+                        'matches_count' => count($resultArray['details'])
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::error('❌ Failed to save plagiarism check results: ' . $e->getMessage());
+                    // لا نوقف العملية إذا فشل الحفظ
+                }
+            }
+
+            return $resultArray;
 
         } finally {
-            // 6) نظافة
-            $del = new \Symfony\Component\Process\Process(['schtasks','/delete','/tn',$taskName,'/f'], $workdir);
-            $del->setTimeout(30);
-            $del->run();
-            \Log::info('🧹 schtasks /delete output: '.$del->getOutput());
+            // 1) احذف مهمة الـ Scheduler والـ runner المؤقت
+            try {
+                $del = new \Symfony\Component\Process\Process(['schtasks','/delete','/tn',$taskName,'/f'], $workdir);
+                $del->setTimeout(30);
+                $del->run();
+                Log::info('🧹 schtasks /delete output: '.$del->getOutput());
+            } catch (\Throwable $e) {
+                Log::warning('⚠️ Failed to delete scheduled task: '.$e->getMessage());
+            }
             @unlink($runner);
-        }
 
-        return array_merge(
-            $this->parseMossReport($html),
-            ['report_url' => $reportUrl]
-        );
+            // 2) نظافة ملفات ناتجة عن المقارنة في مجلد resources/moss
+            //    نحذف فقط الملفات المعروفة كي لا نمس ملفاتك الثابتة (مثل moss.pl و compare_moss.bat).
+            $toDelete = [
+                $workdir . DIRECTORY_SEPARATOR . 'moss_result.txt',
+                $workdir . DIRECTORY_SEPARATOR . 'moss_output.log',
+                $workdir . DIRECTORY_SEPARATOR . 'merged_project1.php',
+                $workdir . DIRECTORY_SEPARATOR . 'merged_project2.php',
+            ];
+
+            // لو في نسخ أخرى أو أنماط مشابهة لاحقًا:
+            foreach (glob($workdir . DIRECTORY_SEPARATOR . 'merged_project*.php') ?: [] as $f) {
+                $toDelete[] = $f;
+            }
+
+            foreach (array_unique($toDelete) as $f) {
+                @is_file($f) && @unlink($f);
+            }
+        }
     }
 
 

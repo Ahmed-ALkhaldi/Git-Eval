@@ -10,7 +10,12 @@ class CodeAnalysisResult extends Model
     use HasFactory;
 
     protected $fillable = [
-        'project_id', 'issue_type', 'message', 'component', 'line'
+        'project_id','issue_type','message','component','line',
+        'severity','rule',
     ];
 
+    public function project()
+    {
+        return $this->belongsTo(Project::class);
+    }
 }

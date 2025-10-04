@@ -9,9 +9,15 @@ class Repository extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['project_id', 'github_url', 'repo_name', 'description', 'stars', 'forks', 'open_issues'];
-
-
+    protected $fillable = [
+        'project_id',
+        'github_url',
+        'repo_name',
+        'description',
+        'stars',
+        'forks',
+        'open_issues',
+    ];
 
     public function project()
     {
@@ -22,5 +28,4 @@ class Repository extends Model
     {
         return $this->hasMany(Commit::class);
     }
-
 }

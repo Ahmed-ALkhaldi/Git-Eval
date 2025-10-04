@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>GitEval AI — تسجيل الدخول</title>
+  <title>GitEval AI — Login</title>
 
   {{-- CSS من public/css --}}
   <link rel="stylesheet" href="{{ asset('css/Global.css') }}">
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
     /* تحسينات طفيفة اختيارية للعرض المستقل */
@@ -52,14 +53,14 @@
         </div>
         <span class="tag">Academic • GitHub • AI</span>
         <div class="visual-copy">
-          <h2>تقييم عادل وذكي لمشاريع التخرج</h2>
-          <p class="subtitle">تكامل مع GitHub وتحليل جودة الشيفرة وكشف التشابه — كل ذلك من مكان واحد.</p>
+          <h2>Fair and Smart Evaluation for Graduation Projects</h2>
+          <p class="subtitle">GitHub integration, code quality analysis, and plagiarism detection — all in one place.</p>
         </div>
       </aside>
 
       <div class="panel-form">
-        <h2 id="login-title">تسجيل الدخول</h2>
-        <p class="subtitle">سجّل دخولك للوصول إلى لوحة التحكم.</p>
+        <h2 id="login-title">Login</h2>
+        <p class="subtitle">Sign in to access your dashboard.</p>
 
         @if ($errors->any())
           <div class="alert error">
@@ -70,22 +71,35 @@
         <form class="form" method="POST" action="{{ route('login.post') }}" novalidate>
           @csrf
 
-          <label class="label" for="email">البريد الإلكتروني</label>
+          <label class="label" for="email">Email Address</label>
           <input class="input" id="email" name="email" type="email" value="{{ old('email') }}" required autofocus>
 
-          <label class="label" for="password">كلمة المرور</label>
+          <label class="label" for="password">Password</label>
           <input class="input" id="password" name="password" type="password" required>
 
           <label class="label-inline">
-            <input type="checkbox" name="remember"> تذكرني
+            <input type="checkbox" name="remember"> Remember Me
           </label>
 
-          <button type="submit" class="btn primary w-full">دخول</button>
+          <button type="submit" class="btn primary w-full">Login</button>
         </form>
 
         <p class="muted mt-4">
-          ليس لديك حساب؟ <a href="{{ route('register') }}">أنشئ حساب</a>
+          Don't have an account? <a href="{{ route('register') }}">Create Account</a>
         </p>
+        
+        <!-- Additional Navigation -->
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+          <p class="muted" style="text-align: center; margin-bottom: 10px;">Quick Access</p>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ route('welcome') }}" class="btn" style="background: #6b7280; color: white; text-decoration: none;">
+              <i class="fa-solid fa-home"></i> Home
+            </a>
+            <a href="{{ route('register') }}" class="btn" style="background: #059669; color: white; text-decoration: none;">
+              <i class="fa-solid fa-user-plus"></i> Register
+            </a>
+          </div>
+        </div>
       </div>
     </section>
   </main>

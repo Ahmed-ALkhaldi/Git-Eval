@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GitEval AI — إنشاء حساب</title>
+  <title>GitEval AI — Create Account</title>
 
   {{-- استدعاء ملفات CSS من public/css --}}
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
@@ -35,6 +35,26 @@
     .btn.primary:hover { opacity:.9;}
     .muted { color:#6b7280;}
     .alert.error { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; padding:10px 12px; border-radius:10px; margin-top:10px;}
+    
+    /* File upload styling */
+    input[type="file"] {
+      padding: 8px 12px;
+      border: 2px dashed #e5e7eb;
+      background: #f9fafb;
+      transition: all 0.3s ease;
+    }
+    input[type="file"]:hover {
+      border-color: var(--primary-700, #1f5eff);
+      background: #f0f7ff;
+    }
+    input[type="file"]:focus {
+      border-color: var(--primary-700, #1f5eff);
+      background: #f0f7ff;
+      box-shadow: 0 0 0 3px rgba(31,94,255,.15);
+    }
+    .text-success { color: #059669 !important; }
+    .text-danger { color: #dc2626 !important; }
+    
     @media (max-width:880px){ .card{grid-template-columns:1fr;} .panel-visual{display:none;} }
   </style>
 </head>
@@ -48,14 +68,14 @@
         </div>
         <span class="tag">For Supervisors & Students</span>
         <div class="visual-copy">
-          <h2>ابدأ رحلتك مع GitEval AI</h2>
-          <p class="subtitle">سجّل لتتبع مساهمات الفريق وجودة الشيفرة وكشف التشابه بسهولة.</p>
+          <h2>Start Your Journey with GitEval AI</h2>
+          <p class="subtitle">Register to track team contributions, code quality, and plagiarism detection easily.</p>
         </div>
       </aside>
 
       <div class="panel-form">
-        <h2 id="register-title">إنشاء حساب</h2>
-        <p class="subtitle">أكمل البيانات التالية لبدء الاستخدام.</p>
+        <h2 id="register-title">Create Account</h2>
+        <p class="subtitle">Complete the following information to get started.</p>
 
         @if ($errors->any())
           <div class="alert error">
@@ -81,13 +101,13 @@
             </div>
 
             <div class="col-md-6 mb-3">
-              <label class="label" for="email">البريد الإلكتروني</label>
+              <label class="label" for="email">Email Address</label>
               <input class="input form-control" id="email" name="email" type="email" value="{{ old('email') }}" required>
             </div>
             <div class="col-md-6 mb-3">
-              <label class="label" for="university_name">اسم الجامعة</label>
+              <label class="label" for="university_name">University Name</label>
               <select class="input form-control" id="university_name" name="university_name" required>
-                <option value="">-- اختر الجامعة --</option>
+                <option value="">-- Select University --</option>
                 <option value="IUG" {{ old('university_name')=='IUG' ? 'selected' : '' }}>IUG</option>
                 <option value="AUG" {{ old('university_name')=='AUG' ? 'selected' : '' }}>AUG</option>
                 <option value="UCAS" {{ old('university_name')=='UCAS' ? 'selected' : '' }}>UCAS</option>
@@ -95,29 +115,30 @@
             </div>
 
             <div class="col-md-6 mb-3">
-              <label class="label" for="university_num">الرقم الجامعي</label>
+              <label class="label" for="university_num">University ID Number</label>
               <input class="input form-control" id="university_num" name="university_num" type="text" value="{{ old('university_num') }}" required>
             </div>
             <div class="col-md-6 mb-3">
-              <label class="label" for="enrollment_certificate">شهادة القيد</label>
+              <label class="label" for="enrollment_certificate">Enrollment Certificate *</label>
               <input class="input form-control" id="enrollment_certificate" name="enrollment_certificate" type="file" accept=".jpg,.jpeg,.png,.pdf" required>
+              <small class="text-muted">Upload your enrollment certificate (PDF, JPG, PNG - Max 4MB)</small>
             </div>
 
             <div class="col-md-6 mb-3">
-              <label class="label" for="password">كلمة المرور</label>
+              <label class="label" for="password">Password</label>
               <input class="input form-control" id="password" name="password" type="password" required>
             </div>
             <div class="col-md-6 mb-3">
-              <label class="label" for="password_confirmation">تأكيد كلمة المرور</label>
+              <label class="label" for="password_confirmation">Confirm Password</label>
               <input class="input form-control" id="password_confirmation" name="password_confirmation" type="password" required>
             </div>
           </div>
 
-          <button type="submit" class="btn primary w-100 mt-3">تسجيل</button>
+          <button type="submit" class="btn primary w-100 mt-3">Register</button>
         </form>
 
         <p class="mt-4 text-center">
-          لديك حساب مسبقًا؟ <a class="text-blue-600" href="{{ route('login') }}">سجّل دخول</a>
+          Already have an account? <a class="text-blue-600" href="{{ route('login') }}">Sign In</a>
         </p>
       </div>
     </section>
@@ -125,5 +146,30 @@
 
   {{-- Bootstrap JS --}}
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    // File upload enhancement
+    document.getElementById('enrollment_certificate').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      const helpText = e.target.nextElementSibling;
+      
+      if (file) {
+        const size = (file.size / 1024 / 1024).toFixed(2);
+        const maxSize = 4; // 4MB
+        
+        if (file.size > maxSize * 1024 * 1024) {
+          helpText.textContent = `File too large (${size}MB). Maximum size is ${maxSize}MB.`;
+          helpText.className = 'text-danger';
+          e.target.value = '';
+        } else {
+          helpText.textContent = `File selected: ${file.name} (${size}MB)`;
+          helpText.className = 'text-success';
+        }
+      } else {
+        helpText.textContent = 'Upload your enrollment certificate (PDF, JPG, PNG - Max 4MB)';
+        helpText.className = 'text-muted';
+      }
+    });
+  </script>
 </body>
 </html>

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController as APIAuthController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\GitHubRepositoryController;
+use App\Http\Controllers\SonarWebhookController;
 
 // ✅ API: تسجيل/دخول "طلاب فقط"
 Route::post('/register', [APIAuthController::class, 'registerStudent']); // يسجّل طالباً فقط بحالة pending (لا توكن)
@@ -21,3 +22,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BlockUnverifiedStudents:
     // (اختياري) API logout (حذف التوكن الحالي)
     Route::post('/logout', [APIAuthController::class, 'logout']);
 });
+
+// SonarQube Webhook - مسار منفصل بدون حماية Sanctum
+Route::post('/webhooks/sonar', [SonarWebhookController::class, 'handle'])
+    ->middleware('throttle:sonar-webhook');

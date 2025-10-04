@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role', // student | supervisor | admin
+        'is_active',
     ];
 
     protected $hidden = [
@@ -28,6 +29,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password'          => 'hashed',
+        'is_active'         => 'boolean',
     ];
 
     /** علاقات */

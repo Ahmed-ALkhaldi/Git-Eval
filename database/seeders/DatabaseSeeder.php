@@ -108,5 +108,11 @@ class DatabaseSeeder extends Seeder
             'verified_by'                 => $supervisor->id, // ← لو FK على supervisors
             'verified_at'                 => now(),
         ]);
+
+        // ---- Fixed Project with repo and members ----
+        $this->call(FixedProjectSeeder::class);
+
+        // ---- Additional seeded project with new students under same supervisor ----
+        $this->call(AdditionalProjectSeeder::class);
     }
 }

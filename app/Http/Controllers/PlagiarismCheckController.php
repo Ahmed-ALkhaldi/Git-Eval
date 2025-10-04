@@ -9,14 +9,34 @@ use ZipArchive;
 
 class PlagiarismCheckController extends Controller
 {
-    /** تحليل التشابه: شاشة اختيار المشاريع */
+    /** تحليل التشابه: شاشة اختيار المشاريع أو عرض النتيجة */
     public function plagiarism($id)
     {
         if (!Auth::check() || Auth::user()->role !== 'supervisor') {
             abort(403, '❌ Access denied. Supervisors only.');
         }
 
-        $project1      = Project::findOrFail($id);
+        $project = Project::findOrFail($id);
+
+        // البحث عن آخر تقرير سرقة أدبية لهذا المشروع
+        $latestReport = PlagiarismCheck::where(function($query) use ($id) {
+            $query->where('project1_id', $id)
+                  ->orWhere('project2_id', $id);
+        })
+        ->with(['project1', 'project2'])
+        ->orderBy('id', 'desc')
+        ->first();
+
+        // إذا كان هناك تقرير موجود، اعرض النتيجة
+        if ($latestReport) {
+            return view('supervisor.plagiarism-result', [
+                'report'  => $latestReport,
+                'matches' => json_decode($latestReport->matches, true),
+            ]);
+        }
+
+        // إذا لم يكن هناك تقرير، اعرض صفحة اختيار المشاريع
+        $project1      = $project;
         $otherProjects = Project::where('id', '!=', $id)->get();
 
         return view('supervisor.plagiarism_select', compact('project1', 'otherProjects'));
@@ -43,22 +63,30 @@ class PlagiarismCheckController extends Controller
         Log::info("🔍 Starting plagiarism check using MOSS for: $dir1 vs $dir2");
 
         $moss   = new \App\Services\MossService();
-        $result = $moss->compareProjects($dir1, $dir2);
+        $result = $moss->compareProjects($dir1, $dir2, $project1->id, $project2->id);
 
         if (!$result) {
             Log::error('❌ MOSS comparison failed, no results were generated.');
             return back()->with('error', '❌ Failed to generate plagiarism report. Please try again.');
         }
 
-        $report = PlagiarismCheck::create([
-            'project1_id'           => $project1->id,
-            'project2_id'           => $project2->id,
-            'similarity_percentage' => $result['average_similarity'] ?? null,
-            'matches'               => json_encode($result['details'] ?? []),
-            'report_url'            => $result['report_url'] ?? null,
+        Log::info('✅ MOSS comparison completed successfully', [
+            'project1' => $project1->title,
+            'project2' => $project2->title,
+            'similarity' => $result['average_similarity'] ?? 0,
+            'matches_count' => count($result['details'] ?? [])
         ]);
 
-        Log::info("✅ Plagiarism report saved. ID {$report->id}");
+        // النتائج محفوظة بالفعل في MossService، نحتاج فقط للعثور على آخر تقرير
+        $report = PlagiarismCheck::where('project1_id', $project1->id)
+            ->where('project2_id', $project2->id)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if (!$report) {
+            Log::error('❌ Failed to find saved plagiarism report');
+            return back()->with('error', '❌ Failed to save plagiarism report. Please try again.');
+        }
 
         return redirect()->route('projects.plagiarism.report', $report->id)
             ->with('success', '✅ Plagiarism report generated successfully.');
@@ -71,7 +99,7 @@ class PlagiarismCheckController extends Controller
             abort(403, '❌ Access denied. Supervisors only.');
         }
 
-        $report = PlagiarismCheck::findOrFail($id);
+        $report = PlagiarismCheck::with(['project1', 'project2'])->findOrFail($id);
 
         return view('supervisor.plagiarism-result', [
             'report'  => $report,

@@ -19,6 +19,10 @@ return [
         'token' => env('SONARQUBE_TOKEN'),
     ],
 
+    'sonar' => [
+        'webhook_secret' => env('SONAR_WEBHOOK_SECRET', ''),
+    ],
+
 
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
